@@ -104,3 +104,7 @@ La misma que la web (ver su README): `src/` plana con pantallas (`Pantalla*.tsx`
 - `firma/` (fuera de git): clave de firma.
 
 Más detalles en [DECISIONES.md](DECISIONES.md).
+
+## Licencia
+
+[MIT](LICENSE) © 2026 Manuel Martínez Manzano. Puedes usar, copiar y modificar el código citando la autoría.
