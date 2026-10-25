@@ -1,0 +1,281 @@
+/*
+ * TOKENS DE DISEÑO de MyOrganizationSchedule (único archivo de identidad visual).
+ * Colores, tipografía, radios, sombras y espaciados se definen aquí como variables CSS
+ * y Tailwind los expone como clases (bg-superficie, text-texto-suave, rounded-tarjeta...).
+ * El tema oscuro solo cambia los valores de las variables.
+ */
+@import 'tailwindcss';
+@import '@fontsource-variable/inter';
+@import '@fontsource-variable/plus-jakarta-sans';
+
+@custom-variant dark (&:where([data-tema='oscuro'], [data-tema='oscuro'] *));
+
+:root {
+  /* Marca */
+  --mos-acento: #5b4bdb; /* se puede cambiar desde Ajustes */
+  --mos-acento-2: #ff6b4a; /* coral del degradado del logotipo */
+  --mos-sobre-acento: #ffffff;
+
+  /* Superficies */
+  --mos-fondo: #f5f4fb;
+  --mos-superficie: #ffffff;
+  --mos-superficie-2: #efedf8;
+  --mos-superficie-3: #e6e3f3;
+  --mos-borde: #e1ddef;
+  --mos-borde-fuerte: #cbc5e2;
+
+  /* Texto (contraste AA sobre superficie) */
+  --mos-texto: #1a1830;
+  --mos-texto-suave: #59557a;
+  --mos-texto-tenue: #6f6b8f;
+
+  /* Estados */
+  --mos-exito: #0f8a6c;
+  --mos-aviso: #b7791f;
+  --mos-peligro: #d23c45;
+  --mos-info: #2f6fd6;
+
+  /* Tipografía */
+  --mos-fuente-texto: 'Inter Variable', system-ui, sans-serif;
+  --mos-fuente-titulos: 'Plus Jakarta Sans Variable', 'Inter Variable', system-ui, sans-serif;
+
+  /* Radios */
+  --mos-radio-sm: 10px;
+  --mos-radio-md: 14px;
+  --mos-radio-lg: 20px;
+  --mos-radio-xl: 28px;
+
+  /* Sombras suaves con un toque del color de marca */
+  --mos-sombra-1: 0 1px 2px rgb(26 24 48 / 0.06), 0 1px 1px rgb(26 24 48 / 0.04);
+  --mos-sombra-2: 0 6px 18px -6px rgb(46 36 120 / 0.16), 0 2px 6px rgb(26 24 48 / 0.06);
+  --mos-sombra-3: 0 22px 48px -16px rgb(46 36 120 / 0.32), 0 6px 14px rgb(26 24 48 / 0.08);
+
+  /* Espaciado base y alto de una hora en el calendario (depende de la densidad) */
+  --mos-espacio: 4px;
+  --mos-hora: 56px;
+  --mos-relleno-tarjeta: 18px;
+
+  color-scheme: light;
+}
+
+[data-densidad='compacta'] {
+  --mos-hora: 44px;
+  --mos-relleno-tarjeta: 12px;
+}
+[data-densidad='comoda'] {
+  --mos-hora: 72px;
+  --mos-relleno-tarjeta: 22px;
+}
+
+[data-tema='oscuro'] {
+  --mos-fondo: #0f0e1a;
+  --mos-superficie: #181629;
+  --mos-superficie-2: #211f36;
+  --mos-superficie-3: #2b2844;
+  --mos-borde: #2f2c4a;
+  --mos-borde-fuerte: #403c62;
+  --mos-texto: #f1effc;
+  --mos-texto-suave: #b4afd3;
+  --mos-texto-tenue: #9a95bd;
+  --mos-exito: #3ccf9f;
+  --mos-aviso: #f2b84b;
+  --mos-peligro: #ff6b72;
+  --mos-info: #6aa2ff;
+  --mos-sombra-1: 0 1px 2px rgb(0 0 0 / 0.4);
+  --mos-sombra-2: 0 8px 22px -8px rgb(0 0 0 / 0.6), 0 2px 6px rgb(0 0 0 / 0.3);
+  --mos-sombra-3: 0 24px 50px -16px rgb(0 0 0 / 0.75), 0 6px 14px rgb(0 0 0 / 0.4);
+  color-scheme: dark;
+}
+
+@theme inline {
+  --color-acento: var(--mos-acento);
+  --color-acento-2: var(--mos-acento-2);
+  --color-sobre-acento: var(--mos-sobre-acento);
+  --color-fondo: var(--mos-fondo);
+  --color-superficie: var(--mos-superficie);
+  --color-superficie-2: var(--mos-superficie-2);
+  --color-superficie-3: var(--mos-superficie-3);
+  --color-borde: var(--mos-borde);
+  --color-borde-fuerte: var(--mos-borde-fuerte);
+  --color-texto: var(--mos-texto);
+  --color-texto-suave: var(--mos-texto-suave);
+  --color-texto-tenue: var(--mos-texto-tenue);
+  --color-exito: var(--mos-exito);
+  --color-aviso: var(--mos-aviso);
+  --color-peligro: var(--mos-peligro);
+  --color-info: var(--mos-info);
+
+  --font-sans: var(--mos-fuente-texto);
+  --font-titulos: var(--mos-fuente-titulos);
+
+  --radius-sm: var(--mos-radio-sm);
+  --radius-md: var(--mos-radio-md);
+  --radius-lg: var(--mos-radio-lg);
+  --radius-xl: var(--mos-radio-xl);
+
+  --shadow-suave: var(--mos-sombra-1);
+  --shadow-media: var(--mos-sombra-2);
+  --shadow-elevada: var(--mos-sombra-3);
+}
+
+/* ------------------------------------------------------------------------ */
+/* Base                                                                      */
+/* ------------------------------------------------------------------------ */
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--mos-fondo);
+  color: var(--mos-texto);
+  font-family: var(--mos-fuente-texto);
+  -webkit-font-smoothing: antialiased;
+  -webkit-tap-highlight-color: transparent;
+}
+
+h1,
+h2,
+h3,
+h4 {
+  font-family: var(--mos-fuente-titulos);
+  letter-spacing: -0.015em;
+}
+
+/* Foco visible y consistente para teclado */
+:focus-visible {
+  outline: 2.5px solid var(--mos-acento);
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+
+::selection {
+  background: color-mix(in oklab, var(--mos-acento) 30%, transparent);
+}
+
+/* Números del reloj y estadísticas con ancho fijo */
+.numeros {
+  font-variant-numeric: tabular-nums;
+}
+
+/* ------------------------------------------------------------------------ */
+/* Componentes reutilizables                                                 */
+/* ------------------------------------------------------------------------ */
+
+@layer components {
+  .tarjeta {
+    background: linear-gradient(
+      180deg,
+      var(--mos-superficie) 0%,
+      color-mix(in oklab, var(--mos-superficie) 94%, var(--mos-acento)) 100%
+    );
+    border: 1px solid var(--mos-borde);
+    border-radius: var(--mos-radio-lg);
+    box-shadow: var(--mos-sombra-1);
+    padding: var(--mos-relleno-tarjeta);
+  }
+
+  .tarjeta-plana {
+    background: var(--mos-superficie);
+    border: 1px solid var(--mos-borde);
+    border-radius: var(--mos-radio-md);
+  }
+
+  .degradado-marca {
+    background: linear-gradient(
+      135deg,
+      var(--mos-acento) 0%,
+      color-mix(in oklab, var(--mos-acento) 55%, var(--mos-acento-2)) 100%
+    );
+  }
+
+  .texto-degradado {
+    background: linear-gradient(120deg, var(--mos-acento), var(--mos-acento-2));
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+
+  .campo {
+    width: 100%;
+    background: var(--mos-superficie);
+    border: 1px solid var(--mos-borde-fuerte);
+    border-radius: var(--mos-radio-sm);
+    padding: 0.55rem 0.75rem;
+    color: var(--mos-texto);
+    font-size: 0.95rem;
+    transition:
+      border-color 0.15s,
+      box-shadow 0.15s;
+  }
+  .campo:focus {
+    outline: none;
+    border-color: var(--mos-acento);
+    box-shadow: 0 0 0 3px color-mix(in oklab, var(--mos-acento) 25%, transparent);
+  }
+  .campo::placeholder {
+    color: var(--mos-texto-tenue);
+  }
+
+  .etiqueta-campo {
+    display: block;
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--mos-texto-suave);
+    margin-bottom: 0.35rem;
+  }
+
+  .chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    border-radius: 999px;
+    padding: 0.2rem 0.65rem;
+    font-size: 0.78rem;
+    font-weight: 600;
+    border: 1px solid var(--mos-borde);
+    background: var(--mos-superficie-2);
+    color: var(--mos-texto-suave);
+  }
+}
+
+/* Barra de desplazamiento discreta */
+.desplazable {
+  scrollbar-width: thin;
+  scrollbar-color: var(--mos-borde-fuerte) transparent;
+}
+
+/* Área segura en móviles con muesca */
+.pb-seguro {
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+/* Mientras se arrastra, evitamos seleccionar texto */
+body.arrastrando {
+  user-select: none;
+  cursor: grabbing;
+}
+
+/* Respeto a quien prefiere menos movimiento */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* Patrón rayado para los bloques protegidos */
+.rayado-protegido {
+  background-image: repeating-linear-gradient(
+    -45deg,
+    color-mix(in oklab, currentColor 10%, transparent) 0 6px,
+    transparent 6px 12px
+  );
+}

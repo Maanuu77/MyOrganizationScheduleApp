@@ -1,0 +1,87 @@
+apply plugin: 'com.android.application'
+
+// ---------------------------------------------------------------------------
+// Firma del APK. La clave NUNCA se sube al repositorio:
+//  - En GitHub Actions llega por variables de entorno (secretos del repositorio).
+//  - En tu PC se lee de firma/firma.properties (carpeta ignorada por git).
+// Si no hay clave, el APK de "release" sale sin firmar (no se podría instalar).
+// ---------------------------------------------------------------------------
+def propiedadesFirma = new Properties()
+def archivoFirma = rootProject.file('../firma/firma.properties')
+if (archivoFirma.exists()) {
+    archivoFirma.withInputStream { propiedadesFirma.load(it) }
+}
+def valorFirma = { String variable, String propiedad ->
+    System.getenv(variable) ?: propiedadesFirma.getProperty(propiedad)
+}
+def rutaClave = valorFirma('MOS_KEYSTORE', 'archivo')
+def hayClave = rutaClave && file(rutaClave).exists()
+
+// Cada compilación de GitHub Actions sube el número de versión (Android lo exige para actualizar)
+def numeroCompilacion = (System.getenv('GITHUB_RUN_NUMBER') ?: '1').toInteger()
+
+android {
+    namespace = "com.maanuu77.myorganizationschedule"
+    compileSdk = rootProject.ext.compileSdkVersion
+    defaultConfig {
+        applicationId "com.maanuu77.myorganizationschedule"
+        minSdkVersion rootProject.ext.minSdkVersion
+        targetSdkVersion rootProject.ext.targetSdkVersion
+        versionCode numeroCompilacion
+        versionName "1.0.${numeroCompilacion}"
+        testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+        aaptOptions {
+             // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
+             // Default: https://android.googlesource.com/platform/frameworks/base/+/282e181b58cf72b6ca770dc7ca5f91f135444502/tools/aapt/AaptAssets.cpp#61
+            ignoreAssetsPattern = '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
+        }
+    }
+    signingConfigs {
+        release {
+            if (hayClave) {
+                storeFile file(rutaClave)
+                storePassword valorFirma('MOS_KEYSTORE_PASSWORD', 'contrasena')
+                keyAlias valorFirma('MOS_KEY_ALIAS', 'alias') ?: 'mos'
+                keyPassword valorFirma('MOS_KEYSTORE_PASSWORD', 'contrasena')
+            }
+        }
+    }
+    buildTypes {
+        release {
+            if (hayClave) {
+                signingConfig signingConfigs.release
+            }
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+        }
+    }
+}
+
+repositories {
+    flatDir{
+        dirs '../capacitor-cordova-android-plugins/src/main/libs', 'libs'
+    }
+}
+
+dependencies {
+    implementation fileTree(include: ['*.jar'], dir: 'libs')
+    implementation "androidx.appcompat:appcompat:$androidxAppCompatVersion"
+    implementation "androidx.coordinatorlayout:coordinatorlayout:$androidxCoordinatorLayoutVersion"
+    implementation "androidx.core:core-splashscreen:$coreSplashScreenVersion"
+    implementation project(':capacitor-android')
+    testImplementation "junit:junit:$junitVersion"
+    androidTestImplementation "androidx.test.ext:junit:$androidxJunitVersion"
+    androidTestImplementation "androidx.test.espresso:espresso-core:$androidxEspressoCoreVersion"
+    implementation project(':capacitor-cordova-android-plugins')
+}
+
+apply from: 'capacitor.build.gradle'
+
+try {
+    def servicesJSON = file('google-services.json')
+    if (servicesJSON.text) {
+        apply plugin: 'com.google.gms.google-services'
+    }
+} catch(Exception e) {
+    logger.info("google-services.json not found, google-services plugin not applied. Push Notifications won't work")
+}

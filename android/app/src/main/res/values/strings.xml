@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">MyOrganizationSchedule</string>
+    <string name="title_activity_main">MyOrganizationSchedule</string>
+    <string name="package_name">com.maanuu77.myorganizationschedule</string>
+    <string name="custom_url_scheme">com.maanuu77.myorganizationschedule</string>
+</resources>

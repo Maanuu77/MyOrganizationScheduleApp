@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="fondo_marca">#0F0E1A</color>
+    <color name="colorPrimary">#5B4BDB</color>
+    <color name="colorPrimaryDark">#0F0E1A</color>
+    <color name="colorAccent">#FF6B4A</color>
+</resources>

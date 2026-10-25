@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="description" content="Planifica tu día, tu semana y tu mes con calendario, rutinas, tareas y sesiones de foco." />
+    <meta name="theme-color" content="#f5f4fb" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="apple-touch-icon" href="/iconos/apple-touch-icon.png" />
+    <title>MyOrganizationSchedule</title>
+    <script>
+      // Aplica el tema guardado antes de pintar para evitar un destello de color incorrecto.
+      // Solo es una preferencia visual; los ajustes reales están en Firestore.
+      (function () {
+        try {
+          var guardado = JSON.parse(localStorage.getItem('mos-tema') || '{}');
+          var oscuro =
+            guardado.tema === 'oscuro' ||
+            ((!guardado.tema || guardado.tema === 'sistema') && window.matchMedia('(prefers-color-scheme: dark)').matches);
+          document.documentElement.dataset.tema = oscuro ? 'oscuro' : 'claro';
+          if (guardado.densidad) document.documentElement.dataset.densidad = guardado.densidad;
+          if (guardado.colorAcento) document.documentElement.style.setProperty('--mos-acento', guardado.colorAcento);
+        } catch (e) {}
+      })();
+    </script>
+  </head>
+  <body>
+    <noscript>MyOrganizationSchedule necesita JavaScript para funcionar.</noscript>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

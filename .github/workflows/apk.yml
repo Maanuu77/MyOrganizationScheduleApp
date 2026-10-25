@@ -1,0 +1,104 @@
+# Compila el APK de Android en cada push a main y lo publica como "release" en GitHub,
+# para descargarlo e instalarlo en el móvil. No hace falta Android Studio en el PC.
+#
+# Secretos necesarios (Settings → Secrets and variables → Actions):
+#   VITE_FIREBASE_API_KEY, VITE_FIREBASE_AUTH_DOMAIN, VITE_FIREBASE_PROJECT_ID,
+#   VITE_FIREBASE_STORAGE_BUCKET, VITE_FIREBASE_MESSAGING_SENDER_ID, VITE_FIREBASE_APP_ID,
+#   VITE_FIREBASE_VAPID_KEY            → configuración de Firebase (como el .env)
+#   GOOGLE_SERVICES_JSON               → android/app/google-services.json en base64
+#   MOS_KEYSTORE_BASE64                → firma/mos-release.jks en base64
+#   MOS_KEYSTORE_PASSWORD              → contraseña de la clave (firma/LEEME-CLAVES.txt)
+
+name: Compilar APK
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: apk-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  comprobar:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm test
+
+  apk:
+    needs: comprobar
+    runs-on: ubuntu-latest
+    env:
+      VITE_FIREBASE_API_KEY: ${{ secrets.VITE_FIREBASE_API_KEY }}
+      VITE_FIREBASE_AUTH_DOMAIN: ${{ secrets.VITE_FIREBASE_AUTH_DOMAIN }}
+      VITE_FIREBASE_PROJECT_ID: ${{ secrets.VITE_FIREBASE_PROJECT_ID }}
+      VITE_FIREBASE_STORAGE_BUCKET: ${{ secrets.VITE_FIREBASE_STORAGE_BUCKET }}
+      VITE_FIREBASE_MESSAGING_SENDER_ID: ${{ secrets.VITE_FIREBASE_MESSAGING_SENDER_ID }}
+      VITE_FIREBASE_APP_ID: ${{ secrets.VITE_FIREBASE_APP_ID }}
+      VITE_FIREBASE_VAPID_KEY: ${{ secrets.VITE_FIREBASE_VAPID_KEY }}
+      GOOGLE_SERVICES_JSON: ${{ secrets.GOOGLE_SERVICES_JSON }}
+      MOS_KEYSTORE_BASE64: ${{ secrets.MOS_KEYSTORE_BASE64 }}
+      MOS_KEYSTORE_PASSWORD: ${{ secrets.MOS_KEYSTORE_PASSWORD }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Comprobar que están los secretos
+        run: |
+          for s in VITE_FIREBASE_API_KEY VITE_FIREBASE_PROJECT_ID VITE_FIREBASE_APP_ID GOOGLE_SERVICES_JSON MOS_KEYSTORE_BASE64 MOS_KEYSTORE_PASSWORD; do
+            if [ -z "${!s}" ]; then echo "::error::Falta el secreto $s (ver README)"; exit 1; fi
+          done
+
+      - run: npm ci
+      - name: Compilar la web y copiarla al proyecto Android
+        run: npm run build && npx cap sync android
+
+      - name: Preparar configuración de Firebase y clave de firma
+        run: |
+          echo "$GOOGLE_SERVICES_JSON" | base64 --decode > android/app/google-services.json
+          echo "$MOS_KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/mos-release.jks"
+          echo "MOS_KEYSTORE=$RUNNER_TEMP/mos-release.jks" >> "$GITHUB_ENV"
+
+      - name: Compilar el APK firmado
+        working-directory: android
+        run: |
+          chmod +x gradlew
+          ./gradlew assembleRelease --no-daemon
+          mkdir -p ../apk
+          cp app/build/outputs/apk/release/app-release.apk "../apk/MyOrganizationSchedule-1.0.${{ github.run_number }}.apk"
+
+      - name: Guardar el APK como artefacto
+        uses: actions/upload-artifact@v4
+        with:
+          name: MyOrganizationSchedule-1.0.${{ github.run_number }}
+          path: apk/*.apk
+
+      - name: Publicar versión en GitHub
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v1.0.${{ github.run_number }}
+          name: MyOrganizationSchedule 1.0.${{ github.run_number }}
+          body: |
+            APK para Android compilado a partir de ${{ github.sha }}.
+            Descárgalo desde el móvil e instálalo (permite "instalar apps desconocidas" la primera vez).
+          files: apk/*.apk

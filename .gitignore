@@ -1,0 +1,39 @@
+# Dependencias
+node_modules/
+functions/node_modules/
+
+# Compilados
+dist/
+dev-dist/
+functions/lib/
+*.tsbuildinfo
+
+# Variables de entorno (nunca se suben)
+.env
+.env.local
+.env.*.local
+functions/.env*
+!.env.example
+
+# Firebase
+.firebase/
+firebase-debug.log*
+firestore-debug.log*
+ui-debug.log*
+*-debug.log
+
+# Editores y sistema
+.vscode/*
+!.vscode/extensions.json
+.idea/
+.DS_Store
+Thumbs.db
+coverage/
+.claude/settings.local.json
+.claude/launch.json
+
+# App Android
+android/app/google-services.json
+firma/
+*.jks
+*.keystore
