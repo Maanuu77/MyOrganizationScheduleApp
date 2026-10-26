@@ -73,7 +73,7 @@ export function Segmentado<T extends string>({
     <div
       role="radiogroup"
       aria-label={etiqueta}
-      className="inline-flex max-w-full overflow-x-auto rounded-md border border-borde bg-superficie-2 p-1"
+      className="inline-flex max-w-full flex-wrap rounded-md border border-borde bg-superficie-2 p-1"
     >
       {opciones.map((o) => {
         const activo = o.valor === valor;

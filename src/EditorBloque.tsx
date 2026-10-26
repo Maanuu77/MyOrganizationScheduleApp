@@ -244,7 +244,7 @@ export function EditorBloque() {
           void guardar();
         }}
       >
-        <div className="overflow-x-auto">
+        <div>
           <Segmentado
             etiqueta="Tipo de bloque"
             valor={f.tipo}

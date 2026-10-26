@@ -96,6 +96,7 @@ Decisiones tomadas durante el desarrollo cuando la especificación no las defin�
 - **Navegación**: barra lateral en escritorio; en móvil, barra inferior con Hoy, Calendario, Foco, Tareas y "Más". El panel de Hoy es fijo a partir de 1280 px y una hoja en pantallas menores (botón flotante).
 - **Atajos**: `N` nuevo, `T` hoy, flechas, `D/S/M/A` para las vistas, `Espacio` pausa el contador y `?` muestra la ayuda.
 - **Movimiento reducido**: `MotionConfig reducedMotion="user"` más una regla CSS que anula animaciones y transiciones.
+- **Sin desplazamiento lateral**: con textos largos las rejillas crecían hasta el ancho del texto (un hijo de `grid` no encoge por debajo de su contenido) y la pantalla del móvil se ensanchaba. Se corrige en `tema.css` con tres reglas globales: `min-width: 0` en los hijos de `.grid`, `overflow-wrap: break-word` para partir enlaces y palabras sin espacios, y `overflow-x: clip` en `html`/`body` como red de seguridad. Los selectores de opciones (`Segmentado`) pasan a una segunda línea en vez de ocultar opciones con scroll.
 
 ## Seguridad y privacidad
 
