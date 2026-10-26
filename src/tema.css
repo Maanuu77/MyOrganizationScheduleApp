@@ -128,6 +128,13 @@ body,
   height: 100%;
 }
 
+/* La página nunca se desplaza en horizontal: si algo se pasa de ancho, se recorta
+   en lugar de ensanchar toda la pantalla (en el móvil obligaba a moverse de lado). */
+html,
+body {
+  overflow-x: clip;
+}
+
 body {
   margin: 0;
   background: var(--mos-fondo);
@@ -135,6 +142,18 @@ body {
   font-family: var(--mos-fuente-texto);
   -webkit-font-smoothing: antialiased;
   -webkit-tap-highlight-color: transparent;
+  /* Las palabras muy largas (enlaces, nombres sin espacios) se parten en vez de desbordar */
+  overflow-wrap: break-word;
+}
+
+@layer base {
+  /* Por defecto un hijo de una rejilla no puede ser más estrecho que su contenido, así que
+     un título largo (aunque esté recortado con «…») ensanchaba la tarjeta y la pantalla.
+     Con min-width: 0 se ajusta a su columna. Está en la capa base para que las clases
+     min-w-* de Tailwind lo puedan sobrescribir. */
+  :where(.grid) > * {
+    min-width: 0;
+  }
 }
 
 h1,
