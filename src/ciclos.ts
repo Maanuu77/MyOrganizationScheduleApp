@@ -184,6 +184,7 @@ export function calcularAvance(
     if (fin > ahoraMs) break;
     tramosNuevos.push({
       tipo: e.fases[indice]?.tipo ?? 'foco',
+      indiceFase: indice,
       inicioMs: inicio,
       finMs: fin,
       duracionMs: duracion,

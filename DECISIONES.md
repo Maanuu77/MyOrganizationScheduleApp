@@ -59,7 +59,13 @@ Decisiones tomadas durante el desarrollo cuando la especificación no las defin�
 - **Fases personalizadas** cuentan como tiempo de foco en las estadísticas (los descansos son los dos tipos de descanso).
 - **Aviso de invasión**: si la fase actual va a pisar un bloque protegido o un evento, se muestra un aviso con el botón "Cortar fase ahí".
 - **Notificaciones del contador**: se preparan recordatorios en el servidor para todos los cambios de fase que quedan (o solo el siguiente si el avance automático está desactivado). Los de la app y los del servidor comparten la etiqueta `mos-contador`, así una notificación sustituye a la otra en vez de duplicarse.
-- **Rutinas de estudio**: lanzan el contador con su ciclo y se marcan como hechas al guardar la sesión.
+- **Rutinas = pasos con descansos, ejecutadas en el contador** (rediseño). Antes había listas de pasos por ámbito (día/semana/mes) y «rutinas de estudio» con un ciclo, y resultaba confuso. Ahora una rutina es una sucesión de pasos con un objetivo («Teoría 50 min → descanso 10 → Psicotécnicos 20 min»):
+  - Cada paso tiene nombre, minutos y, opcionalmente, etiqueta y tarea. Entre pasos hay un **descanso automático** (por defecto 10 min) que se puede cambiar uno a uno o para todos; 0 = sin descanso.
+  - «Empezar» convierte la rutina en fases del contador sincronizado (`fasesDeRutina`): los pasos son fases `personalizada` (cuentan como foco y su aviso dice «Empieza: <paso>») y los descansos, `descansoCorto`. Así se reutilizan el avance automático, los avisos de cambio de fase con la app cerrada y la sincronización entre dispositivos, sin un segundo motor.
+  - Cada fase guarda `pasoId`, `etiquetaId` y `tareaId`, y cada tramo, su `indiceFase`. Al guardar, `repartirPorPasos` crea **un registro de sesión por paso** con su etiqueta (las estadísticas por etiqueta salen solas); los pasos de menos de 1 minuto no se guardan. Un paso cuenta como hecho con al menos la mitad de su duración.
+  - Los días son opcionales: sin días, la rutina es una plantilla que se empieza a mano o se arrastra al calendario (panel «Etiquetas y tareas» o botón de calendario de la tarjeta). Con días y hora puede mostrarse como evento recurrente y avisar antes de empezar.
+  - Los ciclos siguen aparte (Pomodoro y similares).
+  - **Rutinas antiguas**: se convierten al leerlas (`normalizarRutina`): una lista de pasos conserva sus pasos (sin descansos) y sus días; una de estudio pasa a un paso por fase de foco con los descansos de su ciclo; las mensuales quedan sin días. Al guardarlas se reemplaza el documento entero, porque las reglas solo admiten el formato nuevo. Importar una copia antigua también las convierte.
 
 ## Notificaciones y recordatorios
 

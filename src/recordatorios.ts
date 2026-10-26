@@ -108,33 +108,19 @@ export function generarRecordatorios(e: Entrada): RecordatorioNuevo[] {
     );
   }
 
-  // Rutinas: aviso de inicio y pasos con hora y aviso activado
+  // Rutinas: aviso antes de empezar. Los cambios de paso los avisa el contador al ejecutarla.
   for (let d = startOfDay(e.ahoraMs); d.getTime() < limite; d = addDays(d, 1)) {
     for (const r of e.rutinas) {
-      if (!rutinaTocaEnDia(r, d)) continue;
-      if (r.avisos.activo && r.programacion.hora) {
-        const inicio = conHora(d, r.programacion.hora).getTime();
-        añadir(
-          'pasoRutina',
-          `${r.id}-${claveDia(d)}`,
-          inicio - r.avisos.minutosAntes * MS_MINUTO,
-          `Rutina: ${r.nombre}`,
-          `Empieza a las ${hora(inicio)}`,
-          `/rutinas/${r.id}/empezar`,
-        );
-      }
-      for (const p of r.pasos) {
-        if (!p.aviso || !p.hora) continue;
-        const ms = conHora(d, p.hora).getTime();
-        añadir(
-          'pasoRutina',
-          `${r.id}-${p.id}-${claveDia(d)}`,
-          ms,
-          `${r.nombre}: ${p.titulo}`,
-          p.descripcion || 'Es la hora de este paso',
-          `/rutinas/${r.id}/empezar`,
-        );
-      }
+      if (!rutinaTocaEnDia(r, d) || !r.avisos.activo || !r.programacion.hora) continue;
+      const inicio = conHora(d, r.programacion.hora).getTime();
+      añadir(
+        'pasoRutina',
+        `${r.id}-${claveDia(d)}`,
+        inicio - r.avisos.minutosAntes * MS_MINUTO,
+        `Rutina: ${r.nombre}`,
+        `Empieza a las ${hora(inicio)}${r.pasos[0] ? ` con «${r.pasos[0].nombre}»` : ''}`,
+        '/rutinas',
+      );
     }
   }
 

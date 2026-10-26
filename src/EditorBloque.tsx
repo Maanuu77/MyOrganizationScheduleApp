@@ -21,6 +21,7 @@ import {
 } from './operaciones';
 import { expandirCiclo } from './ciclos';
 import { iniciarSesion } from './temporizador';
+import { empezarRutina } from './operacionesRutinas';
 import { claveDia, conHora, desdeClaveDia, formatear } from './fechas';
 import { t } from './textos';
 import type { Evento, ReglaRecurrencia, TipoBloque } from './tipos';
@@ -188,6 +189,7 @@ export function EditorBloque() {
 
   const etiqueta = buscarEtiqueta(etiquetas, f.etiquetaId);
   const inicioFecha = desdeClaveDia(f.fecha);
+  const rutinaDelBloque = rutinas.find((r) => r.id === f.rutinaId);
 
   return (
     <Modal
@@ -491,6 +493,20 @@ export function EditorBloque() {
             {f.tipo === 'sesion' && (
               <Boton variante="primario" icono={<Play size={16} />} onClick={empezarSesion}>
                 {t.calendario.empezarSesion}
+              </Boton>
+            )}
+            {f.tipo === 'rutina' && rutinaDelBloque && (
+              <Boton
+                variante="primario"
+                icono={<Play size={16} />}
+                onClick={async () => {
+                  if (await empezarRutina(rutinaDelBloque, oc.evento.id)) {
+                    cerrar();
+                    navegar('/foco');
+                  }
+                }}
+              >
+                {t.rutinas.empezarRutina}
               </Boton>
             )}
           </div>

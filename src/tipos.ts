@@ -261,6 +261,10 @@ export interface FaseExpandida {
   nombre: string;
   color: string;
   duracionMs: number;
+  /** Solo en las rutinas: paso al que corresponde y su etiqueta y tarea (para registrar el tiempo). */
+  pasoId?: string;
+  etiquetaId?: string | null;
+  tareaId?: string | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -271,6 +275,8 @@ export type EstadoTemporizador = 'inactivo' | 'enCurso' | 'pausado' | 'esperando
 
 export interface TramoSesion {
   tipo: TipoFase;
+  /** Posición de la fase en la lista (para saber a qué paso de una rutina pertenece). */
+  indiceFase?: number;
   inicioMs: number;
   finMs: number;
   /** Tiempo real de la fase, sin contar las pausas. */
@@ -328,36 +334,34 @@ export interface RegistroSesion extends DocumentoBase {
 // Rutinas (users/{uid}/routines) y ejecuciones (routineRuns)
 // ---------------------------------------------------------------------------
 
-export type AmbitoRutina = 'dia' | 'semana' | 'mes';
-
+/**
+ * Una rutina es una sucesión de pasos con un objetivo (p. ej. «Teoría 50 min → descanso →
+ * Psicotécnicos 20 min»). Se ejecuta en el contador como si fuera un ciclo, pero cada fase
+ * tiene su nombre, su etiqueta y su tarea.
+ */
 export interface PasoRutina {
   id: string;
-  titulo: string;
-  hora: string | null; // 'HH:mm'
-  duracionMin: number | null;
+  nombre: string;
+  duracionMin: number;
   etiquetaId: string | null;
-  descripcion: string;
-  aviso: boolean;
+  tareaId: string | null;
+  /** Descanso que va después de este paso (0 = sin descanso). En el último paso no se usa. */
+  descansoMin: number;
 }
 
 export interface ProgramacionRutina {
-  /** Días de la semana (ámbitos día y semana). */
+  /** Días de la semana en que toca (vacío = solo cuando tú la empieces). */
   diasSemana: number[];
-  /** Ámbito mes. */
-  mensual: ReglaMensual | null;
   /** Hora de inicio 'HH:mm' (opcional). */
   hora: string | null;
 }
 
 export interface Rutina extends DocumentoBase {
   nombre: string;
-  ambito: AmbitoRutina;
-  /** 'estudio' reutiliza el editor de ciclos. */
-  clase: 'pasos' | 'estudio';
   color: string;
-  etiquetaId: string | null;
   pasos: PasoRutina[];
-  cicloId: string | null;
+  /** Descanso que se pone por defecto entre pasos al añadir uno nuevo. */
+  descansoPorDefectoMin: number;
   programacion: ProgramacionRutina;
   avisos: { activo: boolean; minutosAntes: number };
   mostrarEnCalendario: boolean;

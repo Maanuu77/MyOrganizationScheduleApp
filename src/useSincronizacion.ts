@@ -20,7 +20,8 @@ import { useDatos } from './almacenDatos';
 import { COLECCIONES, escuchar, refAjustes, refDoc, registrarPerfil } from './datos';
 import { completarAjustes } from './ajustesPorDefecto';
 import { zonaDelDispositivo } from './fechas';
-import type { Ajustes, EstadoContador, IntegracionGoogle } from './tipos';
+import { normalizarRutina } from './rutinas';
+import type { Ajustes, EstadoContador, IntegracionGoogle, PlantillaCiclo } from './tipos';
 
 export function useSesion(): void {
   useEffect(() => {
@@ -118,6 +119,14 @@ export function useSincronizacion(): void {
       console.error('Error de sincronización', error);
       poner({ errorSincronizacion: error.message, datosListos: true });
     };
+    // Las rutinas antiguas de estudio se convierten con su ciclo: por eso se recalculan
+    // cuando llegan las rutinas y también cuando llegan los ciclos.
+    let ciclosLeidos: PlantillaCiclo[] = [];
+    let rutinasLeidas: { id: string }[] = [];
+    const ponerRutinas = () =>
+      poner({
+        rutinas: rutinasLeidas.map((r) => normalizarRutina(r, ciclosLeidos)),
+      });
 
     const bajas = [
       onSnapshot(
@@ -171,13 +180,20 @@ export function useSincronizacion(): void {
       escuchar(
         uid,
         COLECCIONES.ciclos,
-        (ciclos) => poner({ ciclos: ordenarPorCreacion(ciclos) as never }),
+        (ciclos) => {
+          ciclosLeidos = ordenarPorCreacion(ciclos) as unknown as PlantillaCiclo[];
+          poner({ ciclos: ciclosLeidos as never });
+          ponerRutinas();
+        },
         alFallar,
       ),
       escuchar(
         uid,
         COLECCIONES.rutinas,
-        (rutinas) => poner({ rutinas: ordenarPorCreacion(rutinas) as never }),
+        (rutinas) => {
+          rutinasLeidas = ordenarPorCreacion(rutinas);
+          ponerRutinas();
+        },
         alFallar,
       ),
       escuchar(

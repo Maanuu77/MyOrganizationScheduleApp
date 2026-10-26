@@ -20,6 +20,7 @@ import {
 } from 'firebase/firestore';
 import { obtenerAuth, obtenerDb } from './firebase';
 import { useDatos } from './almacenDatos';
+import { normalizarRutina } from './rutinas';
 import type {
   Ajustes,
   DocumentoBase,
@@ -380,9 +381,16 @@ export async function importarTodo(copia: CopiaSeguridad): Promise<number> {
     if (NO_EXPORTAR.includes(nombre)) continue;
     const lista = copia.colecciones[nombre];
     if (!Array.isArray(lista)) continue;
-    const validos = lista.filter(
+    let validos = lista.filter(
       (d) => typeof d.id === 'string' && d.id.length > 0 && d.id.length < 200,
     );
+    // Una copia de antes del cambio de rutinas trae el formato antiguo, que ya no se admite
+    if (nombre === COLECCIONES.rutinas) {
+      const ciclos = (copia.colecciones[COLECCIONES.ciclos] ?? []) as unknown as PlantillaCiclo[];
+      validos = validos.map(
+        (d) => normalizarRutina(d as { id: string }, ciclos) as unknown as typeof d,
+      );
+    }
     await enLotes(validos, (lote, d) => {
       const { id, ...resto } = d;
       lote.set(refDoc(nombre, id as string), limpiar(resto));

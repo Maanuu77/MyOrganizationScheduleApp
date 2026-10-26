@@ -33,6 +33,8 @@ import { Boton } from './Boton';
 import { Segmentado } from './Campos';
 import { IconoEtiqueta } from './IconoEtiqueta';
 import { crearSesionDeEtiqueta, moverOcurrencia, planificarTareaEnCalendario } from './operaciones';
+import { colocarRutinaEnCalendario } from './operacionesRutinas';
+import { duracionRutinaMin } from './rutinas';
 import { expandirOcurrencias } from './recurrencia';
 import { deboIgnorarTecla } from './useAtajos';
 import {
@@ -44,11 +46,12 @@ import {
   minutosDelDia,
 } from './fechas';
 import { t } from './textos';
-import type { Etiqueta, Ocurrencia, Tarea } from './tipos';
+import type { Etiqueta, Ocurrencia, Rutina, Tarea } from './tipos';
 
 type DatosArrastre =
   | { tipo: 'bloque'; ocurrencia: Ocurrencia }
   | { tipo: 'etiqueta'; etiqueta: Etiqueta }
+  | { tipo: 'rutina'; rutina: Rutina }
   | { tipo: 'tarea'; tarea: Tarea };
 
 const PASO_MIN = 15;
@@ -240,7 +243,9 @@ export function PantallaCalendario({ vistaInicial }: { vistaInicial?: VistaCalen
       ? Math.round((d.ocurrencia.finMs - d.ocurrencia.inicioMs) / 60_000)
       : d.tipo === 'etiqueta'
         ? d.etiqueta.duracionMin
-        : (d.tarea.estimacionMin ?? 30);
+        : d.tipo === 'rutina'
+          ? duracionRutinaMin(d.rutina) || 30
+          : (d.tarea.estimacionMin ?? 30);
 
   const colorDe = (d: DatosArrastre): string =>
     d.tipo === 'bloque'
@@ -249,7 +254,9 @@ export function PantallaCalendario({ vistaInicial }: { vistaInicial?: VistaCalen
         '#6D5CF0')
       : d.tipo === 'etiqueta'
         ? d.etiqueta.color
-        : (etiquetas.get(d.tarea.etiquetaId ?? '')?.color ?? '#6D5CF0');
+        : d.tipo === 'rutina'
+          ? d.rutina.color
+          : (etiquetas.get(d.tarea.etiquetaId ?? '')?.color ?? '#6D5CF0');
 
   /** Minuto del día en que caería el elemento, según la posición del puntero en la columna. */
   const minutoDestino = (fechaColumna: string, y: number): number | null => {
@@ -352,6 +359,8 @@ export function PantallaCalendario({ vistaInicial }: { vistaInicial?: VistaCalen
           },
         });
       }
+    } else if (datos.tipo === 'rutina') {
+      await colocarRutinaEnCalendario(datos.rutina, inicio);
     } else {
       await planificarTareaEnCalendario(datos.tarea, inicio);
     }
@@ -564,7 +573,9 @@ export function PantallaCalendario({ vistaInicial }: { vistaInicial?: VistaCalen
                 ? activo.ocurrencia.titulo
                 : activo.tipo === 'etiqueta'
                   ? activo.etiqueta.nombre
-                  : activo.tarea.titulo}
+                  : activo.tipo === 'rutina'
+                    ? activo.rutina.nombre
+                    : activo.tarea.titulo}
             </span>
             <span className="ml-auto shrink-0 text-xs font-semibold opacity-70">
               {duracionDe(activo)}′
