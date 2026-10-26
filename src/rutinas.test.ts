@@ -1,41 +1,45 @@
 import { describe, expect, it } from 'vitest';
-import type { EjecucionRutina, Rutina } from './tipos';
-import { duracionRutinaMin, rutinaTocaEnDia, seguimientoRutina } from './rutinas';
+import type { EjecucionRutina, Etiqueta, Rutina, TramoSesion } from './tipos';
+import {
+  describirDias,
+  duracionRutinaMin,
+  fasesDeRutina,
+  normalizarRutina,
+  repartirPorPasos,
+  rutinaTocaEnDia,
+  seguimientoRutina,
+} from './rutinas';
 import { colocarBloques } from './distribucion';
 import { ocurrenciaPrueba as oc } from './ayudaPruebas';
 import { diferenciaRecordatorios, generarRecordatorios } from './recordatorios';
 import { ajustesPrueba } from './ayudaPruebas';
 
-function rutina(parcial: Partial<Rutina>): Rutina {
+/** Rutina de ejemplo: Teoría 50 min, descanso 10, Psicotécnicos 20 min. */
+function rutina(parcial: Partial<Rutina> = {}): Rutina {
   return {
     id: 'r1',
-    nombre: 'Mañana',
-    ambito: 'dia',
-    clase: 'pasos',
-    color: '#000',
-    etiquetaId: null,
+    nombre: 'Tarde de estudio',
+    color: '#000000',
     pasos: [
       {
         id: 'p1',
-        titulo: 'Agua',
-        hora: null,
-        duracionMin: 5,
-        etiquetaId: null,
-        descripcion: '',
-        aviso: false,
+        nombre: 'Teoría',
+        duracionMin: 50,
+        etiquetaId: 'e1',
+        tareaId: 't1',
+        descansoMin: 10,
       },
       {
         id: 'p2',
-        titulo: 'Leer',
-        hora: null,
+        nombre: 'Psicotécnicos',
         duracionMin: 20,
-        etiquetaId: null,
-        descripcion: '',
-        aviso: false,
+        etiquetaId: 'e2',
+        tareaId: null,
+        descansoMin: 10,
       },
     ],
-    cicloId: null,
-    programacion: { diasSemana: [1, 2, 3, 4, 5], mensual: null, hora: '07:30' },
+    descansoPorDefectoMin: 10,
+    programacion: { diasSemana: [1, 2, 3, 4, 5], hora: '16:00' },
     avisos: { activo: true, minutosAntes: 5 },
     mostrarEnCalendario: false,
     eventoCalendarioId: null,
@@ -45,6 +49,8 @@ function rutina(parcial: Partial<Rutina>): Rutina {
     ...parcial,
   };
 }
+
+const etiqueta = (id: string, color: string) => ({ id, color }) as Etiqueta;
 
 const ejecucion = (
   fecha: string,
@@ -65,29 +71,84 @@ const ejecucion = (
   actualizadoEnMs: 0,
 });
 
+const tramo = (indiceFase: number, inicioMin: number, minutos: number): TramoSesion => ({
+  tipo: 'personalizada',
+  indiceFase,
+  inicioMs: inicioMin * 60_000,
+  finMs: (inicioMin + minutos) * 60_000,
+  duracionMs: minutos * 60_000,
+});
+
 describe('rutinas', () => {
-  it('toca solo los días elegidos y desde su creación', () => {
-    const r = rutina({});
+  it('dura lo que sus pasos más los descansos entre ellos (no el del final)', () => {
+    expect(duracionRutinaMin(rutina())).toBe(80);
+  });
+
+  it('se convierte en fases del contador con descansos y el color de cada etiqueta', () => {
+    const fases = fasesDeRutina(rutina(), [etiqueta('e1', '#ff0000')]);
+    expect(fases.map((f) => [f.nombre, f.duracionMs / 60_000])).toEqual([
+      ['Teoría', 50],
+      ['Descanso', 10],
+      ['Psicotécnicos', 20],
+    ]);
+    expect(fases[0]).toMatchObject({
+      tipo: 'personalizada',
+      color: '#ff0000',
+      pasoId: 'p1',
+      tareaId: 't1',
+    });
+    expect(fases[1].tipo).toBe('descansoCorto');
+    // Sin etiqueta conocida, el color de la rutina
+    expect(fases[2].color).toBe('#000000');
+  });
+
+  it('un descanso de 0 minutos no crea fase', () => {
+    const r = rutina();
+    r.pasos[0].descansoMin = 0;
+    expect(fasesDeRutina(r, [])).toHaveLength(2);
+  });
+
+  it('reparte el tiempo entre los pasos y marca los hechos', () => {
+    const fases = fasesDeRutina(rutina(), []);
+    // Teoría completa (con una pausa partida en dos tramos), descanso entero y 5 min de psicotécnicos
+    const { pasos, hechos } = repartirPorPasos(fases, [
+      tramo(0, 0, 30),
+      tramo(0, 35, 20),
+      { ...tramo(1, 55, 10), tipo: 'descansoCorto' },
+      tramo(2, 65, 5),
+    ]);
+    expect(hechos).toEqual(['p1']);
+    expect(pasos).toHaveLength(2);
+    expect(pasos[0]).toMatchObject({
+      pasoId: 'p1',
+      etiquetaId: 'e1',
+      tareaId: 't1',
+      focoRealMs: 50 * 60_000,
+      descansosMs: 10 * 60_000,
+      inicioMs: 0,
+      finMs: 65 * 60_000,
+    });
+    expect(pasos[1]).toMatchObject({ pasoId: 'p2', etiquetaId: 'e2', focoRealMs: 5 * 60_000 });
+  });
+
+  it('toca solo los días elegidos y desde su creación; sin días, nunca', () => {
+    const r = rutina();
     expect(rutinaTocaEnDia(r, new Date(2026, 2, 4))).toBe(true); // miércoles
     expect(rutinaTocaEnDia(r, new Date(2026, 2, 7))).toBe(false); // sábado
     expect(rutinaTocaEnDia(r, new Date(2026, 1, 25))).toBe(false); // antes de crearla
+    const sinDias = rutina({ programacion: { diasSemana: [], hora: null } });
+    expect(rutinaTocaEnDia(sinDias, new Date(2026, 2, 4))).toBe(false);
   });
 
-  it('rutina mensual el primer lunes', () => {
-    const r = rutina({
-      ambito: 'mes',
-      programacion: {
-        diasSemana: [],
-        mensual: { modo: 'ordinal', ordinal: 1, diaSemana: 1 },
-        hora: null,
-      },
-    });
-    expect(rutinaTocaEnDia(r, new Date(2026, 3, 6))).toBe(true);
-    expect(rutinaTocaEnDia(r, new Date(2026, 3, 13))).toBe(false);
+  it('describe los días de forma natural', () => {
+    expect(describirDias([1, 2, 3, 4, 5], 1)).toBe('De lunes a viernes');
+    expect(describirDias([0, 1, 2, 3, 4, 5, 6], 1)).toBe('Todos los días');
+    expect(describirDias([0, 6], 1)).toBe('Fines de semana');
+    expect(describirDias([5, 1, 3], 1)).toBe('lun, mié, vie');
   });
 
   it('seguimiento: cumplimiento, racha y pasos', () => {
-    const r = rutina({});
+    const r = rutina();
     const hoy = new Date(2026, 2, 6, 12); // viernes
     const s = seguimientoRutina(
       r,
@@ -105,7 +166,70 @@ describe('rutinas', () => {
     expect(s.completadas).toBe(3);
     expect(s.racha).toBe(2); // miércoles y jueves; hoy aún no cuenta en contra
     expect(s.porcentajePasos).toBeCloseTo((1 + 0.5 + 1 + 1) / 5);
-    expect(duracionRutinaMin(r)).toBe(25);
+  });
+});
+
+describe('rutinas antiguas', () => {
+  it('una lista de pasos conserva sus pasos y sus días', () => {
+    const r = normalizarRutina(
+      {
+        id: 'v1',
+        nombre: 'Mañana',
+        ambito: 'dia',
+        clase: 'pasos',
+        etiquetaId: 'e9',
+        pasos: [
+          { id: 'a', titulo: 'Agua', duracionMin: 5 },
+          { id: 'b', titulo: 'Leer', duracionMin: null },
+        ],
+        programacion: { diasSemana: [], hora: '07:30' },
+      },
+      [],
+    );
+    expect(r.programacion).toEqual({ diasSemana: [0, 1, 2, 3, 4, 5, 6], hora: '07:30' });
+    expect(r.pasos).toEqual([
+      { id: 'a', nombre: 'Agua', duracionMin: 5, etiquetaId: 'e9', tareaId: null, descansoMin: 0 },
+      { id: 'b', nombre: 'Leer', duracionMin: 10, etiquetaId: 'e9', tareaId: null, descansoMin: 0 },
+    ]);
+  });
+
+  it('una rutina de estudio se convierte en pasos con los descansos de su ciclo', () => {
+    const r = normalizarRutina(
+      {
+        id: 'v2',
+        nombre: 'Estudio',
+        ambito: 'mes',
+        clase: 'estudio',
+        cicloId: 'c1',
+        etiquetaId: 'e1',
+      },
+      [
+        {
+          id: 'c1',
+          nombre: 'Pomodoro',
+          fases: [
+            { id: 'f', tipo: 'foco', nombre: 'Foco', color: '#000', duracionMin: 25 },
+            { id: 'd', tipo: 'descansoCorto', nombre: 'Descanso', color: '#000', duracionMin: 5 },
+          ],
+          repeticiones: 2,
+          descansoLargoCada: null,
+          descansoLargoMin: 15,
+          creadoEnMs: 0,
+          actualizadoEnMs: 0,
+        },
+      ],
+    );
+    // Las mensuales ya no existen: queda para empezarla cuando quieras
+    expect(r.programacion.diasSemana).toEqual([]);
+    expect(r.pasos.map((p) => [p.nombre, p.duracionMin, p.descansoMin, p.etiquetaId])).toEqual([
+      ['Foco', 25, 5, 'e1'],
+      ['Foco', 25, 5, 'e1'],
+    ]);
+  });
+
+  it('una rutina ya nueva no cambia', () => {
+    const nueva = rutina();
+    expect(normalizarRutina(nueva, [])).toEqual(nueva);
   });
 });
 

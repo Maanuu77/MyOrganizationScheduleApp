@@ -2,7 +2,7 @@
 // Se usan tanto en la pantalla Hoy como en el panel fijo y en la hoja móvil.
 
 import { useMemo, useState } from 'react';
-import { Link, useNavigate } from 'react-router';
+import { useNavigate } from 'react-router';
 import { AnimatePresence } from 'motion/react';
 import { CalendarPlus, CheckCheck, ListTodo, Play, Plus, Repeat, Sun } from 'lucide-react';
 import { addDays, startOfDay } from 'date-fns';
@@ -16,7 +16,8 @@ import { Boton } from './Boton';
 import { alternarHecho, planificacionDe, tareaVacia } from './operaciones';
 import { tareas as dbTareas } from './datos';
 import { seccionarTareas, ordenarTareas } from './tareasLogica';
-import { rutinasDelDia, seguimientoRutina } from './rutinas';
+import { duracionRutinaMin, rutinasDelDia, seguimientoRutina } from './rutinas';
+import { empezarRutina } from './operacionesRutinas';
 import { claveDia, formatearHora } from './fechas';
 import { t } from './textos';
 import type { Ocurrencia } from './tipos';
@@ -273,6 +274,7 @@ export function TareasDelDia({ compacta }: { compacta?: boolean }) {
 export function RutinasDelDia() {
   const rutinas = useDatos((s) => s.rutinas);
   const ejecuciones = useDatos((s) => s.ejecuciones);
+  const navegar = useNavigate();
   const hoy = new Date();
   const lista = useMemo(() => rutinasDelDia(rutinas, hoy), [rutinas, hoy.toDateString()]); // eslint-disable-line react-hooks/exhaustive-deps
   if (!lista.length) return null;
@@ -302,19 +304,23 @@ export function RutinasDelDia() {
                   {r.nombre}
                 </p>
                 <p className="text-xs text-texto-suave">
-                  {r.programacion.hora ?? '—'} ·{' '}
+                  {r.programacion.hora ? `${r.programacion.hora} · ` : ''}
+                  {duracionRutinaMin(r)} min ·{' '}
                   {t.rutinas.progreso(ejecucion?.pasosHechos.length ?? 0, r.pasos.length)}
                   {racha > 0 ? ` · 🔥 ${racha}` : ''}
                 </p>
               </div>
               {!hecha && (
-                <Link
-                  to={`/rutinas/${r.id}/empezar`}
+                <button
+                  type="button"
+                  onClick={async () => {
+                    if (await empezarRutina(r)) navegar('/foco');
+                  }}
                   className="grid h-9 w-9 place-items-center rounded-full degradado-marca text-white shadow-media"
                   aria-label={`${t.rutinas.empezar}: ${r.nombre}`}
                 >
                   <Play size={15} />
-                </Link>
+                </button>
               )}
             </div>
           );

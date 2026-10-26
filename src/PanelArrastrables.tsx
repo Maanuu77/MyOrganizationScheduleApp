@@ -1,4 +1,4 @@
-// Panel con las etiquetas y tareas que se arrastran al calendario.
+// Panel con las etiquetas, rutinas y tareas que se arrastran al calendario.
 // En escritorio es una barra lateral; en móvil, una hoja inferior plegable.
 // Alternativa sin arrastre: el botón de cada elemento abre "Crear sesión en…" / "Planificar en…".
 
@@ -6,16 +6,18 @@ import { useMemo, useState } from 'react';
 import { Link } from 'react-router';
 import { useDraggable } from '@dnd-kit/core';
 import { motion } from 'motion/react';
-import { CalendarPlus, ChevronUp, GripVertical, Plus, Tag } from 'lucide-react';
+import { CalendarPlus, ChevronUp, GripVertical, Plus, Repeat, Tag } from 'lucide-react';
 import { addHours, startOfHour } from 'date-fns';
 import { buscarEtiqueta, etiquetasActivas, useDatos } from './almacenDatos';
 import { avisar } from './almacenUI';
 import { IconoEtiqueta } from './IconoEtiqueta';
 import { DialogoFechaHora } from './DialogoFechaHora';
 import { crearSesionDeEtiqueta, planificarTareaEnCalendario } from './operaciones';
+import { colocarRutinaEnCalendario } from './operacionesRutinas';
+import { duracionRutinaMin } from './rutinas';
 import { COLORES_PRIORIDAD, seccionarTareas } from './tareasLogica';
 import { t } from './textos';
-import type { Etiqueta, Tarea } from './tipos';
+import type { Etiqueta, Rutina, Tarea } from './tipos';
 
 function ChipArrastrable({
   etiqueta,
@@ -117,12 +119,56 @@ function TareaArrastrable({
   );
 }
 
+function RutinaArrastrable({ rutina, alElegirHora }: { rutina: Rutina; alElegirHora: () => void }) {
+  const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
+    id: `rutina-${rutina.id}`,
+    data: { tipo: 'rutina', rutina },
+  });
+  return (
+    <div className={`flex items-center gap-1 ${isDragging ? 'opacity-40' : ''}`}>
+      <div
+        ref={setNodeRef}
+        {...listeners}
+        {...attributes}
+        aria-roledescription="arrastrable"
+        aria-label={`${rutina.nombre}, ${duracionRutinaMin(rutina)} min`}
+        className="flex min-w-0 flex-1 cursor-grab items-center gap-2 rounded-md border border-borde bg-superficie px-2.5 py-2 text-sm font-semibold shadow-suave hover:shadow-media"
+        style={{ borderLeft: `3px solid ${rutina.color}`, touchAction: 'manipulation' }}
+      >
+        <Repeat size={14} className="shrink-0" style={{ color: rutina.color }} aria-hidden />
+        <span className="truncate">{rutina.nombre}</span>
+        <span className="ml-auto shrink-0 text-[11px] font-medium text-texto-tenue">
+          {duracionRutinaMin(rutina)}′
+        </span>
+      </div>
+      <button
+        type="button"
+        onClick={alElegirHora}
+        className="grid h-9 w-8 shrink-0 place-items-center rounded-md text-texto-tenue hover:bg-superficie-2 hover:text-acento"
+        aria-label={`${t.rutinas.colocarEn} ${rutina.nombre}`}
+        title={t.rutinas.colocarEn}
+      >
+        <CalendarPlus size={15} />
+      </button>
+    </div>
+  );
+}
+
 export function PanelArrastrables({ modo }: { modo: 'lateral' | 'hoja' }) {
   const etiquetas = useDatos((s) => s.etiquetas);
   const tareas = useDatos((s) => s.tareas);
+  const rutinas = useDatos((s) => s.rutinas);
   const inicioSemana = useDatos((s) => s.ajustes.inicioSemana);
   const [abierta, setAbierta] = useState(false);
-  const [eligiendo, setEligiendo] = useState<{ etiqueta?: Etiqueta; tarea?: Tarea } | null>(null);
+  const [eligiendo, setEligiendo] = useState<{
+    etiqueta?: Etiqueta;
+    tarea?: Tarea;
+    rutina?: Rutina;
+  } | null>(null);
+  const rutinasActivas = useMemo(
+    () => rutinas.filter((r) => !r.archivada && r.pasos.length > 0),
+    [rutinas],
+  );
   const activas = useMemo(() => etiquetasActivas(etiquetas), [etiquetas]);
   const pendientes = useMemo(() => {
     const s = seccionarTareas(tareas, new Date(), inicioSemana);
@@ -153,6 +199,22 @@ export function PanelArrastrables({ modo }: { modo: 'lateral' | 'hoja' }) {
           </div>
         )}
       </div>
+      {rutinasActivas.length > 0 && (
+        <div>
+          <p className="mb-2 text-xs font-bold tracking-wide text-texto-suave uppercase">
+            {t.rutinas.arrastrar}
+          </p>
+          <div className="space-y-1.5">
+            {rutinasActivas.map((r) => (
+              <RutinaArrastrable
+                key={r.id}
+                rutina={r}
+                alElegirHora={() => setEligiendo({ rutina: r })}
+              />
+            ))}
+          </div>
+        </div>
+      )}
       {pendientes.length > 0 && (
         <div>
           <p className="mb-2 text-xs font-bold tracking-wide text-texto-suave uppercase">
@@ -176,15 +238,23 @@ export function PanelArrastrables({ modo }: { modo: 'lateral' | 'hoja' }) {
   const dialogo = (
     <DialogoFechaHora
       abierto={!!eligiendo}
-      titulo={eligiendo?.tarea ? t.calendario.planificarEn : t.calendario.crearSesionEn}
+      titulo={
+        eligiendo?.rutina
+          ? t.rutinas.colocarEn
+          : eligiendo?.tarea
+            ? t.calendario.planificarEn
+            : t.calendario.crearSesionEn
+      }
       inicialMs={addHours(startOfHour(new Date()), 1).getTime()}
       alCerrar={() => setEligiendo(null)}
       alAceptar={async (inicio) => {
-        const ok = eligiendo?.tarea
-          ? await planificarTareaEnCalendario(eligiendo.tarea, inicio)
-          : eligiendo?.etiqueta
-            ? await crearSesionDeEtiqueta(eligiendo.etiqueta, inicio)
-            : null;
+        const ok = eligiendo?.rutina
+          ? await colocarRutinaEnCalendario(eligiendo.rutina, inicio)
+          : eligiendo?.tarea
+            ? await planificarTareaEnCalendario(eligiendo.tarea, inicio)
+            : eligiendo?.etiqueta
+              ? await crearSesionDeEtiqueta(eligiendo.etiqueta, inicio)
+              : null;
         if (ok) {
           setEligiendo(null);
           avisar(t.comun.guardado, 'exito');

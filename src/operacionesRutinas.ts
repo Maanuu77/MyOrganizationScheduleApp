@@ -1,26 +1,24 @@
-// Guardado de rutinas y su reflejo en el calendario.
-// Si una rutina tiene hora y "mostrar en el calendario", se mantiene un evento recurrente
-// de tipo "rutina" con la misma programación.
+// Operaciones de rutinas: guardarlas (con su reflejo en el calendario), empezarlas en el
+// contador y colocarlas en el calendario un día concreto.
+// Si una rutina tiene días, hora y "mostrar en el calendario", se mantiene un evento
+// recurrente de tipo "rutina" con la misma programación.
 
 import { startOfDay } from 'date-fns';
 import { useDatos } from './almacenDatos';
 import { avisar } from './almacenUI';
-import { eventos as dbEventos, rutinas as dbRutinas, type DatosNuevos } from './datos';
-import { eventoVacio } from './operaciones';
-import { reglaDeRutina, duracionRutinaMin } from './rutinas';
-import { expandirCiclo, duracionTotal } from './ciclos';
+import {
+  COLECCIONES,
+  eventos as dbEventos,
+  reemplazar,
+  rutinas as dbRutinas,
+  type DatosNuevos,
+} from './datos';
+import { crearBloque, eventoVacio } from './operaciones';
+import { duracionRutinaMin, fasesDeRutina, reglaDeRutina } from './rutinas';
+import { iniciarSesion } from './temporizador';
 import { conHora } from './fechas';
 import { t } from './textos';
-import type { Rutina } from './tipos';
-
-/** Duración con la que se pinta la rutina en el calendario. */
-function duracionEnCalendario(rutina: DatosNuevos<Rutina>): number {
-  if (rutina.clase === 'estudio' && rutina.cicloId) {
-    const ciclo = useDatos.getState().ciclos.find((c) => c.id === rutina.cicloId);
-    if (ciclo) return Math.round(duracionTotal(expandirCiclo(ciclo)) / 60_000);
-  }
-  return duracionRutinaMin(rutina) || 30;
-}
+import type { Evento, Rutina } from './tipos';
 
 export async function guardarRutina(
   datos: DatosNuevos<Rutina>,
@@ -30,7 +28,9 @@ export async function guardarRutina(
     const rutina = previa
       ? { ...previa, ...datos }
       : await dbRutinas.crear({ ...datos, eventoCalendarioId: null });
-    const quiereEvento = datos.mostrarEnCalendario && !!datos.programacion.hora && !datos.archivada;
+    const regla = reglaDeRutina(datos);
+    const quiereEvento =
+      datos.mostrarEnCalendario && !!datos.programacion.hora && !!regla && !datos.archivada;
     let eventoId = previa?.eventoCalendarioId ?? null;
     const existe = eventoId ? useDatos.getState().eventos.some((e) => e.id === eventoId) : false;
 
@@ -43,11 +43,10 @@ export async function guardarRutina(
         tipo: 'rutina' as const,
         titulo: datos.nombre,
         rutinaId: rutina.id,
-        etiquetaId: datos.etiquetaId,
         color: datos.color,
         inicioMs: inicio,
-        finMs: inicio + duracionEnCalendario(datos) * 60_000,
-        recurrencia: reglaDeRutina(datos),
+        finMs: inicio + (duracionRutinaMin(datos) || 30) * 60_000,
+        recurrencia: regla,
       };
       if (eventoId && existe) await dbEventos.actualizar(eventoId, campos);
       else eventoId = (await dbEventos.crear(eventoVacio(campos))).id;
@@ -58,8 +57,11 @@ export async function guardarRutina(
       eventoId = null;
     }
 
-    await dbRutinas.actualizar(rutina.id, { ...datos, eventoCalendarioId: eventoId });
-    return { ...rutina, eventoCalendarioId: eventoId } as Rutina;
+    // Se reemplaza el documento entero: así una rutina con el formato antiguo queda
+    // guardada solo con los campos nuevos (las reglas de Firestore no admiten los viejos)
+    const final = { ...rutina, ...datos, eventoCalendarioId: eventoId } as Rutina;
+    await reemplazar<Rutina>(COLECCIONES.rutinas, final);
+    return final;
   } catch (e) {
     console.error(e);
     avisar(t.comun.error, 'error');
@@ -75,4 +77,50 @@ export async function borrarRutina(rutina: Rutina): Promise<void> {
     await dbEventos.borrar(rutina.eventoCalendarioId, useDatos.getState().excepciones);
   }
   await dbRutinas.borrar(rutina.id);
+}
+
+/**
+ * Empieza la rutina en el contador: cada paso es una fase con su nombre y su etiqueta, con
+ * los descansos entre medias. Devuelve false si el contador ya estaba ocupado.
+ */
+export async function empezarRutina(
+  rutina: Rutina,
+  eventoId: string | null = null,
+): Promise<boolean> {
+  if (!rutina.pasos.length) {
+    avisar(t.rutinas.sinPasos, 'error');
+    return false;
+  }
+  const { contador, etiquetas } = useDatos.getState();
+  if (contador && contador.estado !== 'inactivo') {
+    avisar(t.rutinas.contadorOcupado, 'error');
+    return false;
+  }
+  await iniciarSesion({
+    modo: 'ciclo',
+    fases: fasesDeRutina(rutina, etiquetas),
+    etiquetaId: rutina.pasos[0].etiquetaId,
+    tareaId: null,
+    eventoId,
+    cicloId: null,
+    rutinaId: rutina.id,
+  });
+  return true;
+}
+
+/** Coloca la rutina en el calendario a una hora concreta (al soltarla o elegir hora). */
+export function colocarRutinaEnCalendario(
+  rutina: Rutina,
+  inicioMs: number,
+): Promise<Evento | null> {
+  return crearBloque(
+    eventoVacio({
+      tipo: 'rutina',
+      titulo: rutina.nombre,
+      rutinaId: rutina.id,
+      color: rutina.color,
+      inicioMs,
+      finMs: inicioMs + (duracionRutinaMin(rutina) || 30) * 60_000,
+    }),
+  );
 }

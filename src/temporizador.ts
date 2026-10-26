@@ -37,6 +37,7 @@ import {
   type EstadoPlano,
 } from './ciclos';
 import { idRecordatorio } from './recordatorios';
+import { repartirPorPasos } from './rutinas';
 import type { EstadoContador, FaseExpandida, Recordatorio, TramoSesion } from './tipos';
 
 const ID = 'actual';
@@ -137,6 +138,7 @@ export function saltarFase(): Promise<void> {
     const hecho = transcurridoMs(plano, ahora);
     const tramo: TramoSesion = {
       tipo: e.fases[e.indiceFase].tipo,
+      indiceFase: e.indiceFase,
       inicioMs: plano.inicioFaseMs ?? ahora,
       finMs: ahora,
       duracionMs: hecho,
@@ -223,19 +225,26 @@ export interface ResumenSesion {
   modo: 'ciclo' | 'cronometro';
 }
 
-/** Resumen de la sesión en curso, incluyendo la parte hecha de la fase actual. */
-export function resumenDe(e: EstadoContador): ResumenSesion {
+/** Tramos de la sesión hasta ahora, incluyendo la parte hecha de la fase actual. */
+function tramosHastaAhora(e: EstadoContador, ahora: number): TramoSesion[] {
   const plano = aPlano(e)!;
-  const ahora = ahoraServidor();
   const tramos = [...(e.tramos ?? [])];
   if (e.estado !== 'esperando' && e.indiceFase < e.fases.length && plano.inicioFaseMs !== null) {
     tramos.push({
       tipo: e.fases[e.indiceFase].tipo,
+      indiceFase: e.indiceFase,
       inicioMs: plano.inicioFaseMs,
       finMs: ahora,
       duracionMs: transcurridoMs(plano, ahora),
     });
   }
+  return tramos;
+}
+
+/** Resumen de la sesión en curso, incluyendo la parte hecha de la fase actual. */
+export function resumenDe(e: EstadoContador): ResumenSesion {
+  const ahora = ahoraServidor();
+  const tramos = tramosHastaAhora(e, ahora);
   const { focoMs, descansoMs, fasesFoco } = resumirTramos(tramos);
   return {
     inicioMs: e.sesionInicioMs ?? tramos[0]?.inicioMs ?? ahora,
@@ -251,45 +260,73 @@ export function resumenDe(e: EstadoContador): ResumenSesion {
   };
 }
 
-/** Guarda el registro de la sesión y deja el contador libre. */
+/**
+ * Guarda la sesión y deja el contador libre. Si la lanzó una rutina, se guarda un registro
+ * por cada paso (con su etiqueta y su tarea) y se apunta qué pasos se han hecho hoy.
+ */
 export async function terminarYGuardar(
   resumen: ResumenSesion,
   nota: string,
   valoracion: number | null,
-  rutinaId: string | null = null,
+  contador: EstadoContador | null = null,
 ): Promise<void> {
-  await registros.crear({ ...resumen, nota, valoracion });
-  // Si la lanzó una rutina de estudio, la marcamos como hecha hoy
-  if (rutinaId) await completarEjecucionDeHoy(rutinaId);
+  if (contador?.rutinaId) {
+    const { pasos, hechos } = repartirPorPasos(
+      contador.fases,
+      tramosHastaAhora(contador, resumen.finMs),
+    );
+    for (const [i, p] of pasos.entries()) {
+      await registros.crear({
+        ...resumen,
+        etiquetaId: p.etiquetaId,
+        tareaId: p.tareaId,
+        inicioMs: p.inicioMs,
+        finMs: p.finMs,
+        focoRealMs: p.focoRealMs,
+        descansosMs: p.descansosMs,
+        // Las interrupciones son de toda la sesión: las apuntamos solo una vez
+        interrupciones: i === 0 ? resumen.interrupciones : 0,
+        fasesCompletadas: hechos.includes(p.pasoId) ? 1 : 0,
+        nota,
+        valoracion,
+      });
+    }
+    const totales = contador.fases.filter((f) => f.pasoId).length;
+    await apuntarEjecucionDeHoy(contador.rutinaId, hechos, totales, resumen.inicioMs);
+  } else {
+    await registros.crear({ ...resumen, nota, valoracion });
+  }
   await detener();
 }
 
-async function completarEjecucionDeHoy(rutinaId: string): Promise<void> {
-  const { ejecuciones: lista, rutinas } = useDatos.getState();
+/** Marca en el seguimiento de hoy los pasos hechos de la rutina (sin perder los de antes). */
+async function apuntarEjecucionDeHoy(
+  rutinaId: string,
+  hechos: string[],
+  totales: number,
+  inicioMs: number,
+): Promise<void> {
   const hoy = claveDia(new Date());
-  const rutina = rutinas.find((r) => r.id === rutinaId);
-  const previa = lista.find((e) => e.rutinaId === rutinaId && e.fecha === hoy);
-  const pasos = rutina?.pasos.map((p) => p.id) ?? [];
-  if (previa) {
-    await ejecuciones.actualizar(previa.id, {
-      completada: true,
-      finMs: Date.now(),
-      pasosHechos: pasos,
-      indicePaso: pasos.length,
-    });
-  } else {
+  const previa = useDatos
+    .getState()
+    .ejecuciones.find((e) => e.rutinaId === rutinaId && e.fecha === hoy);
+  const pasosHechos = [...new Set([...(previa?.pasosHechos ?? []), ...hechos])];
+  const datos = {
+    finMs: Date.now(),
+    pasosHechos,
+    pasosTotales: totales,
+    completada: totales > 0 && pasosHechos.length >= totales,
+    indicePaso: pasosHechos.length,
+  };
+  if (previa) await ejecuciones.actualizar(previa.id, datos);
+  else
     await ejecuciones.crear({
+      ...datos,
       rutinaId,
       fecha: hoy,
-      inicioMs: Date.now(),
-      finMs: Date.now(),
-      pasosHechos: pasos,
-      pasosTotales: pasos.length,
-      completada: true,
-      indicePaso: pasos.length,
+      inicioMs,
       inicioPasoMs: null,
     });
-  }
 }
 
 /** Deja el contador libre sin guardar nada. */

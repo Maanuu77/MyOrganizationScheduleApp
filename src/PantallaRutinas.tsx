@@ -1,41 +1,46 @@
-// Rutinas por ámbito (día, semana, mes) con su seguimiento: racha, cumplimiento y pasos hechos.
+// Rutinas: cada tarjeta muestra los pasos con su barra, lo que dura en total, cuándo toca y
+// un botón para empezarla en el contador.
 import { useMemo, useState } from 'react';
-import { Link } from 'react-router';
+import { useNavigate } from 'react-router';
 import { motion } from 'motion/react';
-import { Clock, Flame, Pencil, Play, Plus, Repeat } from 'lucide-react';
-import { addDays, startOfDay } from 'date-fns';
+import { CalendarPlus, Clock, Coffee, Flame, Pencil, Play, Plus, Repeat } from 'lucide-react';
+import { addDays, addHours, startOfDay, startOfHour } from 'date-fns';
 import { useDatos } from './almacenDatos';
+import { avisar } from './almacenUI';
 import { Cabecera } from './Cabecera';
 import { Boton } from './Boton';
-import { Segmentado } from './Campos';
 import { EstadoVacio } from './EstadoVacio';
 import { EditorRutina } from './EditorRutina';
-import { AnilloProgreso } from './AnilloProgreso';
-import { duracionRutinaMin, rutinaTocaEnDia, seguimientoRutina } from './rutinas';
-import { describirRegla } from './recurrencia';
-import { reglaDeRutina } from './rutinas';
+import { BarraRutina } from './BarraRutina';
+import { DialogoFechaHora } from './DialogoFechaHora';
+import { colocarRutinaEnCalendario, empezarRutina } from './operacionesRutinas';
+import { describirDias, duracionRutinaMin, rutinaTocaEnDia, seguimientoRutina } from './rutinas';
+import { claveDia, duracionTexto } from './fechas';
 import { t } from './textos';
-import type { AmbitoRutina, Rutina } from './tipos';
+import type { Rutina } from './tipos';
 
 export function PantallaRutinas() {
   const rutinas = useDatos((s) => s.rutinas);
   const ejecuciones = useDatos((s) => s.ejecuciones);
-  const ciclos = useDatos((s) => s.ciclos);
-  const [ambito, setAmbito] = useState<AmbitoRutina>('dia');
+  const etiquetas = useDatos((s) => s.etiquetas);
+  const inicioSemana = useDatos((s) => s.ajustes.inicioSemana);
+  const navegar = useNavigate();
   const [editando, setEditando] = useState<Rutina | null>(null);
   const [abierto, setAbierto] = useState(false);
+  const [colocando, setColocando] = useState<Rutina | null>(null);
   const lista = useMemo(
-    () =>
-      rutinas
-        .filter((r) => r.ambito === ambito && !r.archivada)
-        .sort((a, b) => a.nombre.localeCompare(b.nombre)),
-    [rutinas, ambito],
+    () => rutinas.filter((r) => !r.archivada).sort((a, b) => a.nombre.localeCompare(b.nombre)),
+    [rutinas],
   );
   const hoy = startOfDay(new Date());
 
   const abrir = (r: Rutina | null) => {
     setEditando(r);
     setAbierto(true);
+  };
+
+  const empezar = async (r: Rutina) => {
+    if (await empezarRutina(r)) navegar('/foco');
   };
 
   return (
@@ -49,17 +54,6 @@ export function PantallaRutinas() {
           </Boton>
         }
       />
-      <div className="mb-5">
-        <Segmentado
-          etiqueta={t.rutinas.ambito}
-          valor={ambito}
-          alCambiar={setAmbito}
-          opciones={(['dia', 'semana', 'mes'] as AmbitoRutina[]).map((a) => ({
-            valor: a,
-            texto: `${t.rutinas.ambitos[a]} (${rutinas.filter((r) => r.ambito === a && !r.archivada).length})`,
-          }))}
-        />
-      </div>
 
       {lista.length === 0 ? (
         <EstadoVacio
@@ -75,10 +69,14 @@ export function PantallaRutinas() {
       ) : (
         <ul className="grid gap-3 md:grid-cols-2 2xl:grid-cols-3">
           {lista.map((r, i) => {
-            const seg = seguimientoRutina(r, ejecuciones, addDays(hoy, -29), addDays(hoy, 1));
+            const conDias = r.programacion.diasSemana.length > 0;
+            const seg = conDias
+              ? seguimientoRutina(r, ejecuciones, addDays(hoy, -29), addDays(hoy, 1))
+              : null;
             const toca = rutinaTocaEnDia(r, hoy);
-            const ciclo = ciclos.find((c) => c.id === r.cicloId);
-            const duracion = duracionRutinaMin(r);
+            const hechaHoy = ejecuciones.some(
+              (e) => e.rutinaId === r.id && e.completada && e.fecha === claveDia(hoy),
+            );
             return (
               <motion.li
                 key={r.id}
@@ -90,77 +88,98 @@ export function PantallaRutinas() {
                   backgroundImage: `linear-gradient(160deg, color-mix(in oklab, ${r.color} 13%, var(--mos-superficie)), var(--mos-superficie) 65%)`,
                 }}
               >
-                <div className="flex items-start gap-3">
-                  <AnilloProgreso
-                    progreso={seg.cumplimiento}
-                    tamano={54}
-                    grosor={6}
-                    color={r.color}
-                    etiqueta={t.rutinas.cumplimiento}
-                  >
-                    <span className="text-xs font-extrabold">
-                      {Math.round(seg.cumplimiento * 100)}%
-                    </span>
-                  </AnilloProgreso>
+                <div className="flex items-start gap-2">
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-2">
-                      <h2 className="min-w-0 truncate font-bold">{r.nombre}</h2>
-                      {toca && (
+                      <h2 className="min-w-0 truncate text-lg font-bold">{r.nombre}</h2>
+                      {toca && !hechaHoy && (
                         <span className="chip shrink-0 border-acento/30 bg-acento/10 py-0 text-[11px] text-acento">
                           {t.rutinas.tocaHoy}
                         </span>
                       )}
-                    </div>
-                    <p className="line-clamp-2 text-xs text-texto-suave">
-                      {describirRegla(reglaDeRutina(r), new Date(r.creadoEnMs))}
-                    </p>
-                    <p className="mt-0.5 flex items-center gap-2 text-xs text-texto-suave">
-                      {r.programacion.hora && (
-                        <span className="flex items-center gap-1">
-                          <Clock size={12} aria-hidden /> {r.programacion.hora}
+                      {hechaHoy && (
+                        <span className="chip shrink-0 border-exito/30 bg-exito/10 py-0 text-[11px] text-exito">
+                          {t.rutinas.hechaHoy}
                         </span>
                       )}
-                      <span>
-                        {r.clase === 'estudio'
-                          ? (ciclo?.nombre ?? t.foco.ciclo)
-                          : `${r.pasos.length} ${t.rutinas.pasos.toLowerCase()}${duracion ? ` · ${duracion} min` : ''}`}
+                    </div>
+                    <p className="mt-0.5 flex flex-wrap items-center gap-x-2 text-xs text-texto-suave">
+                      <span className="flex items-center gap-1 font-semibold text-texto">
+                        <Clock size={12} aria-hidden />
+                        {duracionTexto(duracionRutinaMin(r) * 60_000)}
                       </span>
+                      <span>
+                        {conDias
+                          ? describirDias(r.programacion.diasSemana, inicioSemana)
+                          : t.rutinas.soloAMano}
+                        {r.programacion.hora ? ` · ${r.programacion.hora}` : ''}
+                      </span>
+                      {seg && seg.racha > 0 && (
+                        <span className="flex items-center gap-0.5" title={t.rutinas.racha}>
+                          <Flame size={12} className="text-aviso" aria-hidden /> {seg.racha}
+                        </span>
+                      )}
                     </p>
                   </div>
-                </div>
-                <dl className="grid grid-cols-3 gap-2 text-center">
-                  <div className="rounded-md bg-superficie-2/70 py-1.5">
-                    <dt className="text-[11px] text-texto-tenue">{t.rutinas.racha}</dt>
-                    <dd className="flex items-center justify-center gap-1 font-extrabold">
-                      <Flame size={14} className="text-aviso" aria-hidden /> {seg.racha}
-                    </dd>
-                  </div>
-                  <div className="rounded-md bg-superficie-2/70 py-1.5">
-                    <dt className="text-[11px] text-texto-tenue">{t.rutinas.cumplimiento}</dt>
-                    <dd className="font-extrabold">
-                      {seg.completadas}/{seg.programadas}
-                    </dd>
-                  </div>
-                  <div className="rounded-md bg-superficie-2/70 py-1.5">
-                    <dt className="text-[11px] text-texto-tenue">{t.rutinas.pasosHechos}</dt>
-                    <dd className="font-extrabold">{Math.round(seg.porcentajePasos * 100)}%</dd>
-                  </div>
-                </dl>
-                <div className="mt-auto flex gap-2">
-                  <Link
-                    to={`/rutinas/${r.id}/empezar`}
-                    className="inline-flex h-9 flex-1 items-center justify-center gap-2 rounded-md degradado-marca text-sm font-semibold text-white shadow-media"
+                  <Boton
+                    variante="fantasma"
+                    tamano="icono"
+                    className="h-9 w-9 shrink-0"
+                    onClick={() => abrir(r)}
+                    aria-label={`${t.comun.editar}: ${r.nombre}`}
                   >
-                    <Play size={15} aria-hidden /> {t.rutinas.empezar}
-                  </Link>
+                    <Pencil size={16} />
+                  </Boton>
+                </div>
+
+                <BarraRutina rutina={r} etiquetas={etiquetas} />
+
+                {/* Los pasos en orden, con sus descansos */}
+                <ol className="space-y-1 text-sm">
+                  {r.pasos.map((p, j) => {
+                    const color = etiquetas.find((e) => e.id === p.etiquetaId)?.color ?? r.color;
+                    return (
+                      <li key={p.id}>
+                        <div className="flex items-center gap-2">
+                          <span
+                            className="h-2 w-2 shrink-0 rounded-full"
+                            style={{ background: color }}
+                            aria-hidden
+                          />
+                          <span className="min-w-0 flex-1 truncate font-medium">{p.nombre}</span>
+                          <span className="numeros shrink-0 text-xs text-texto-suave">
+                            {p.duracionMin}′
+                          </span>
+                        </div>
+                        {j < r.pasos.length - 1 && p.descansoMin > 0 && (
+                          <div className="flex items-center gap-2 pl-0.5 text-xs text-texto-tenue">
+                            <Coffee size={11} aria-hidden />
+                            <span className="flex-1">{t.rutinas.descanso}</span>
+                            <span className="numeros">{p.descansoMin}′</span>
+                          </div>
+                        )}
+                      </li>
+                    );
+                  })}
+                </ol>
+
+                <div className="mt-auto flex gap-2 pt-1">
+                  <Boton
+                    variante="primario"
+                    className="flex-1"
+                    icono={<Play size={16} />}
+                    onClick={() => empezar(r)}
+                  >
+                    {t.rutinas.empezar}
+                  </Boton>
                   <Boton
                     variante="secundario"
-                    tamano="sm"
-                    className="h-9"
-                    icono={<Pencil size={14} />}
-                    onClick={() => abrir(r)}
+                    tamano="icono"
+                    onClick={() => setColocando(r)}
+                    aria-label={`${t.rutinas.colocarEn} ${r.nombre}`}
+                    title={t.rutinas.colocarEn}
                   >
-                    {t.comun.editar}
+                    <CalendarPlus size={17} />
                   </Boton>
                 </div>
               </motion.li>
@@ -168,11 +187,19 @@ export function PantallaRutinas() {
           })}
         </ul>
       )}
-      <EditorRutina
-        abierto={abierto}
-        rutina={editando}
-        ambitoInicial={ambito}
-        alCerrar={() => setAbierto(false)}
+
+      <EditorRutina abierto={abierto} rutina={editando} alCerrar={() => setAbierto(false)} />
+      <DialogoFechaHora
+        abierto={!!colocando}
+        titulo={t.rutinas.colocarEn}
+        inicialMs={addHours(startOfHour(new Date()), 1).getTime()}
+        alCerrar={() => setColocando(null)}
+        alAceptar={async (inicio) => {
+          if (colocando && (await colocarRutinaEnCalendario(colocando, inicio))) {
+            setColocando(null);
+            avisar(t.comun.guardado, 'exito');
+          }
+        }}
       />
     </div>
   );

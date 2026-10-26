@@ -6,8 +6,11 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router';
 import { AnimatePresence, motion } from 'motion/react';
 import {
+  Check,
   CloudCheck,
+  Coffee,
   Pause,
+  Repeat,
   Play,
   Plus,
   Scissors,
@@ -229,6 +232,7 @@ function SesionEnCurso() {
     useEstadoContador();
   const etiquetas = useDatos((s) => s.etiquetas);
   const tareas = useDatos((s) => s.tareas);
+  const rutinas = useDatos((s) => s.rutinas);
   const formato24h = useDatos((s) => s.ajustes.formato24h);
   const esMovil = useEsMovil();
   const [resumen, setResumen] = useState<ResumenSesion | null>(null);
@@ -275,8 +279,15 @@ function SesionEnCurso() {
   }, [contador]);
 
   if (!contador) return null;
-  const etiqueta = buscarEtiqueta(etiquetas, contador.etiquetaId);
-  const tarea = tareas.find((x) => x.id === contador.tareaId);
+  // En una rutina, la etiqueta y la tarea son las del paso que toca (en los descansos, ninguna)
+  const rutina = contador.rutinaId ? rutinas.find((r) => r.id === contador.rutinaId) : undefined;
+  const etiqueta = buscarEtiqueta(
+    etiquetas,
+    contador.rutinaId ? (fase?.etiquetaId ?? null) : contador.etiquetaId,
+  );
+  const tarea = tareas.find(
+    (x) => x.id === (contador.rutinaId ? (fase?.tareaId ?? null) : contador.tareaId),
+  );
   const color = cicloTerminado
     ? 'var(--mos-exito)'
     : (fase?.color ?? etiqueta?.color ?? 'var(--mos-acento)');
@@ -295,7 +306,7 @@ function SesionEnCurso() {
     if (!resumen) return;
     setGuardando(true);
     try {
-      await terminarYGuardar(resumen, nota.trim(), valoracion, contador.rutinaId ?? null);
+      await terminarYGuardar(resumen, nota.trim(), valoracion, contador);
       avisar(t.foco.sesionGuardada, 'logro');
       setResumen(null);
     } catch (e) {
@@ -319,6 +330,11 @@ function SesionEnCurso() {
       />
 
       <div className="mb-4 flex flex-wrap items-center justify-center gap-2">
+        {rutina && (
+          <span className="chip text-sm font-bold">
+            <Repeat size={14} aria-hidden /> {rutina.nombre}
+          </span>
+        )}
         {etiqueta && (
           <span
             className="chip text-sm"
@@ -376,7 +392,7 @@ function SesionEnCurso() {
                 ? '✓'
                 : relojTexto(restanteMs)}
           </p>
-          {!cronometro && !cicloTerminado && (
+          {!cronometro && !cicloTerminado && !rutina && (
             <p className="mt-1 text-sm text-texto-suave">
               {siguiente
                 ? `${t.foco.siguienteFase}: ${siguiente.nombre} · ${Math.round(siguiente.duracionMs / 60000)}′`
@@ -394,6 +410,66 @@ function SesionEnCurso() {
       {!cronometro && contador.fases.length > 1 && (
         <div className="mt-6 w-full max-w-md">
           <BarraFases fases={contador.fases} indiceActual={contador.indiceFase} />
+        </div>
+      )}
+
+      {/* Rutina: qué toca ahora, qué viene después y la lista de pasos */}
+      {rutina && !cicloTerminado && (
+        <div className="mt-5 w-full max-w-md space-y-3 text-left">
+          <div className="grid grid-cols-2 gap-2">
+            <div className="rounded-md border border-borde bg-superficie px-3 py-2">
+              <p className="text-[11px] font-bold tracking-wide text-texto-tenue uppercase">
+                {t.rutinas.ahora}
+              </p>
+              <p className="truncate font-bold" style={{ color: fase?.color }}>
+                {fase?.nombre}
+              </p>
+            </div>
+            <div className="rounded-md border border-borde bg-superficie px-3 py-2">
+              <p className="text-[11px] font-bold tracking-wide text-texto-tenue uppercase">
+                {t.rutinas.despues}
+              </p>
+              <p className="truncate font-bold">
+                {siguiente
+                  ? `${siguiente.nombre} · ${Math.round(siguiente.duracionMs / 60000)}′`
+                  : t.rutinas.alFinal}
+              </p>
+            </div>
+          </div>
+          <ol className="space-y-1" aria-label={t.rutinas.pasos}>
+            {contador.fases.map((f, i) => {
+              const hecho = i < contador.indiceFase;
+              const actual = i === contador.indiceFase;
+              const descanso = !f.pasoId;
+              return (
+                <li
+                  key={i}
+                  aria-current={actual ? 'step' : undefined}
+                  className={`flex items-center gap-2 rounded-md px-2.5 ${descanso ? 'py-0.5 text-xs' : 'py-1.5 text-sm'} ${
+                    actual ? 'bg-acento/10 font-bold' : ''
+                  } ${hecho ? 'text-texto-tenue' : ''}`}
+                >
+                  {descanso ? (
+                    <Coffee size={12} className="ml-0.5 shrink-0" aria-hidden />
+                  ) : hecho ? (
+                    <Check size={15} className="shrink-0 text-exito" aria-label="Hecho" />
+                  ) : (
+                    <span
+                      className="ml-1 h-2 w-2 shrink-0 rounded-full"
+                      style={{ background: f.color }}
+                      aria-hidden
+                    />
+                  )}
+                  <span className={`min-w-0 flex-1 truncate ${hecho ? 'line-through' : ''}`}>
+                    {f.nombre}
+                  </span>
+                  <span className="numeros shrink-0 text-xs text-texto-suave">
+                    {Math.round(f.duracionMs / 60000)}′
+                  </span>
+                </li>
+              );
+            })}
+          </ol>
         </div>
       )}
 

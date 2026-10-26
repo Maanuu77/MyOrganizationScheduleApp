@@ -28,10 +28,6 @@ const PantallaTareas = perezoso(() => import('./PantallaTareas'), 'PantallaTarea
 const PantallaFoco = perezoso(() => import('./PantallaFoco'), 'PantallaFoco');
 const PantallaCiclos = perezoso(() => import('./PantallaCiclos'), 'PantallaCiclos');
 const PantallaRutinas = perezoso(() => import('./PantallaRutinas'), 'PantallaRutinas');
-const PantallaEjecutarRutina = perezoso(
-  () => import('./PantallaEjecutarRutina'),
-  'PantallaEjecutarRutina',
-);
 const PantallaEstadisticas = perezoso(
   () => import('./PantallaEstadisticas'),
   'PantallaEstadisticas',
@@ -82,7 +78,8 @@ function AppConFirebase() {
           <Route path="foco" element={<PantallaFoco />} />
           <Route path="ciclos" element={<PantallaCiclos />} />
           <Route path="rutinas" element={<PantallaRutinas />} />
-          <Route path="rutinas/:id/empezar" element={<PantallaEjecutarRutina />} />
+          {/* Enlace de los avisos antiguos: las rutinas ya se empiezan desde su tarjeta */}
+          <Route path="rutinas/:id/empezar" element={<Navigate to="/rutinas" replace />} />
           <Route path="estadisticas" element={<PantallaEstadisticas />} />
           <Route path="etiquetas" element={<PantallaEtiquetas />} />
           <Route path="avisos" element={<PantallaAvisos />} />
