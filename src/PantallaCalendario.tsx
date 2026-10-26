@@ -16,7 +16,8 @@ import {
   type DragStartEvent,
 } from '@dnd-kit/core';
 import { addDays, addMonths, addWeeks, startOfDay, startOfMonth } from 'date-fns';
-import { CalendarRange, ChevronLeft, ChevronRight, Plus } from 'lucide-react';
+import { useAnimate } from 'motion/react';
+import { CalendarRange, ChevronDown, ChevronLeft, ChevronRight, Plus } from 'lucide-react';
 import { useUI, avisar, type VistaCalendario } from './almacenUI';
 import { useDatos } from './almacenDatos';
 import { useClavesConAviso, useOcurrencias } from './useCalendarioDatos';
@@ -24,6 +25,8 @@ import { useEsMovil } from './useMedia';
 import { VistaTiempo, useAltoHora, type Previsualizacion } from './VistaTiempo';
 import { VistaMes, diasDelMes } from './VistaMes';
 import { VistaAgenda } from './VistaAgenda';
+import { TiraSemanal } from './TiraSemanal';
+import { useDeslizar } from './useDeslizar';
 import { PanelArrastrables } from './PanelArrastrables';
 import { marcarFinArrastre } from './BloqueCalendario';
 import { Boton } from './Boton';
@@ -72,8 +75,14 @@ function rangoVista(
   return { desde: d.getTime(), hasta: addDays(d, 30).getTime(), dias: [] };
 }
 
-function tituloVista(vista: VistaCalendario, fecha: Date, dias: Date[]): string {
-  if (vista === 'dia') return capitalizar(formatear(fecha, "EEEE d 'de' MMMM"));
+/** En el móvil la semana no cabe: se muestra el día con la tira semanal encima. */
+function vistaEfectiva(vista: VistaCalendario, esMovil: boolean): VistaCalendario {
+  return esMovil && vista === 'semana' ? 'dia' : vista;
+}
+
+function tituloVista(vista: VistaCalendario, fecha: Date, dias: Date[], corto = false): string {
+  if (vista === 'dia')
+    return capitalizar(formatear(fecha, corto ? 'EEEE d MMM' : "EEEE d 'de' MMMM"));
   if (vista === 'semana') {
     const [a, b] = [dias[0], dias[6]];
     return a.getMonth() === b.getMonth()
@@ -99,13 +108,15 @@ export function PantallaSemana() {
 }
 
 export function PantallaCalendario({ vistaInicial }: { vistaInicial?: VistaCalendario }) {
-  const vista = useUI((s) => s.vista);
+  const vistaGuardada = useUI((s) => s.vista);
   const fechaMs = useUI((s) => s.fechaMs);
   const poner = useUI((s) => s.poner);
   const inicioSemana = useDatos((s) => s.ajustes.inicioSemana);
   const duracionDefecto = useDatos((s) => s.ajustes.duracionPorDefectoMin);
   const etiquetasLista = useDatos((s) => s.etiquetas);
   const esMovil = useEsMovil();
+  const vista = vistaEfectiva(vistaGuardada, esMovil);
+  const diaMovil = esMovil && vista === 'dia';
   const altoHora = useAltoHora();
   const [parametros, setParametros] = useSearchParams();
   const [activo, setActivo] = useState<DatosArrastre | null>(null);
@@ -133,14 +144,19 @@ export function PantallaCalendario({ vistaInicial }: { vistaInicial?: VistaCalen
     () => rangoVista(vista, fecha, inicioSemana),
     [vista, fecha, inicioSemana],
   );
-  const ocurrencias = useOcurrencias(desde, hasta);
+  // En el día del móvil cargamos la semana entera para pintar los puntos de la tira
+  const rangoCarga = useMemo(
+    () => (diaMovil ? rangoVista('semana', fecha, inicioSemana) : { desde, hasta }),
+    [diaMovil, fecha, inicioSemana, desde, hasta],
+  );
+  const ocurrencias = useOcurrencias(rangoCarga.desde, rangoCarga.hasta);
   const avisos = useClavesConAviso();
   const etiquetas = useMemo(() => new Map(etiquetasLista.map((e) => [e.id, e])), [etiquetasLista]);
 
   const mover = useCallback(
     (sentido: -1 | 1) => {
       const f = new Date(useUI.getState().fechaMs);
-      const v = useUI.getState().vista;
+      const v = vistaEfectiva(useUI.getState().vista, esMovil);
       const nueva =
         v === 'dia'
           ? addDays(f, sentido)
@@ -151,8 +167,29 @@ export function PantallaCalendario({ vistaInicial }: { vistaInicial?: VistaCalen
               : addDays(f, sentido * 30);
       poner({ fechaMs: nueva.getTime() });
     },
-    [poner],
+    [poner, esMovil],
   );
+
+  // Móvil: deslizar sobre el día cambia de día, con un pequeño desplazamiento animado
+  const [rejilla, animar] = useAnimate<HTMLDivElement>();
+  const irADia = useCallback(
+    (d: Date) => {
+      const actual = startOfDay(useUI.getState().fechaMs).getTime();
+      const nuevo = startOfDay(d).getTime();
+      if (nuevo === actual) return;
+      poner({ fechaMs: d.getTime() });
+      if (rejilla.current)
+        void animar(
+          rejilla.current,
+          { x: [nuevo > actual ? 40 : -40, 0], opacity: [0.4, 1] },
+          { duration: 0.22, ease: [0.22, 1, 0.36, 1] },
+        );
+    },
+    [poner, animar, rejilla],
+  );
+  const gestosDia = useDeslizar((sentido) => irADia(addDays(useUI.getState().fechaMs, sentido)));
+  // En Mes y Agenda, deslizar avanza o retrocede un periodo
+  const gestosPeriodo = useDeslizar(mover);
 
   // Atajos propios del calendario: flechas y D/S/M/A
   useEffect(() => {
@@ -320,7 +357,30 @@ export function PantallaCalendario({ vistaInicial }: { vistaInicial?: VistaCalen
     }
   };
 
-  const titulo = tituloVista(vista, fecha, dias);
+  const titulo = tituloVista(vista, fecha, dias, esMovil);
+
+  const nuevoBloque = () => {
+    const base = vista === 'agenda' || vista === 'mes' ? startOfDay(Date.now()) : startOfDay(fecha);
+    const ahora = new Date();
+    const hora = claveDia(base) === claveDia(ahora) ? ahora.getHours() + 1 : 9;
+    abrirNuevo(base.getTime() + hora * 3_600_000, 0);
+  };
+
+  const selectorVista = (
+    <Segmentado
+      etiqueta="Vista"
+      valor={vista}
+      alCambiar={(v) => poner({ vista: v })}
+      opciones={[
+        { valor: 'dia', texto: t.calendario.dia },
+        // En el móvil la semana se sustituye por el día con la tira semanal
+        ...(esMovil ? [] : [{ valor: 'semana' as const, texto: t.calendario.semana }]),
+        { valor: 'mes', texto: t.calendario.mes },
+        { valor: 'agenda', texto: t.calendario.agenda },
+      ]}
+      tamano="sm"
+    />
+  );
 
   return (
     <DndContext
@@ -332,83 +392,127 @@ export function PantallaCalendario({ vistaInicial }: { vistaInicial?: VistaCalen
       onDragCancel={limpiar}
     >
       <div className={esMovil ? 'pb-16' : ''}>
-        {/* Barra de herramientas */}
-        <div className="mb-4 flex flex-wrap items-center gap-2">
-          <h1
-            className="mr-auto min-w-0 truncate text-xl font-extrabold sm:text-2xl"
-            aria-live="polite"
-          >
-            {titulo}
-          </h1>
-          <div className="flex items-center gap-1">
-            <Boton
-              variante="secundario"
-              tamano="icono"
-              onClick={() => mover(-1)}
-              aria-label={t.comun.anterior}
-            >
-              <ChevronLeft size={18} />
-            </Boton>
-            <Boton variante="secundario" onClick={() => poner({ fechaMs: Date.now() })}>
-              {t.calendario.irHoy}
-            </Boton>
-            <Boton
-              variante="secundario"
-              tamano="icono"
-              onClick={() => mover(1)}
-              aria-label={t.comun.siguiente}
-            >
-              <ChevronRight size={18} />
-            </Boton>
-            <input
-              type="date"
-              className="campo h-10 w-[150px]"
-              aria-label={t.calendario.irFecha}
-              value={claveDia(fecha)}
-              onChange={(e) =>
-                e.target.value && poner({ fechaMs: desdeClaveDia(e.target.value).getTime() })
-              }
-            />
+        {/* Barra de herramientas del móvil: título que abre el selector de fecha, «Hoy» y «+»
+            en una fila, y las vistas debajo */}
+        {esMovil && (
+          <div className="mb-3 space-y-2.5">
+            <div className="flex items-center gap-2">
+              <label className="relative mr-auto flex min-w-0 items-center gap-1 rounded-md">
+                <h1 className="truncate text-xl font-extrabold" aria-live="polite">
+                  {titulo}
+                </h1>
+                <ChevronDown size={18} className="shrink-0 text-texto-tenue" aria-hidden />
+                {/* El selector de fecha nativo, invisible encima del título */}
+                <input
+                  type="date"
+                  className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
+                  aria-label={t.calendario.irFecha}
+                  value={claveDia(fecha)}
+                  onClick={(e) => {
+                    try {
+                      e.currentTarget.showPicker?.();
+                    } catch {
+                      // Algunos navegadores no lo permiten: se abre al tocar el campo igualmente
+                    }
+                  }}
+                  onChange={(e) => e.target.value && irADia(desdeClaveDia(e.target.value))}
+                />
+              </label>
+              <Boton variante="secundario" tamano="sm" onClick={() => irADia(new Date())}>
+                {t.calendario.irHoy}
+              </Boton>
+              <Boton
+                variante="primario"
+                tamano="icono"
+                onClick={nuevoBloque}
+                aria-label={t.calendario.nuevoBloque}
+              >
+                <Plus size={18} />
+              </Boton>
+            </div>
+            {selectorVista}
           </div>
-          <Segmentado
-            etiqueta="Vista"
-            valor={vista}
-            alCambiar={(v) => poner({ vista: v })}
-            opciones={[
-              { valor: 'dia', texto: t.calendario.dia },
-              { valor: 'semana', texto: t.calendario.semana },
-              { valor: 'mes', texto: t.calendario.mes },
-              { valor: 'agenda', texto: t.calendario.agenda },
-            ]}
-            tamano="sm"
-          />
-          {!esMovil && (
+        )}
+
+        {/* Barra de herramientas */}
+        {!esMovil && (
+          <div className="mb-4 flex flex-wrap items-center gap-2">
+            <h1
+              className="mr-auto min-w-0 truncate text-xl font-extrabold sm:text-2xl"
+              aria-live="polite"
+            >
+              {titulo}
+            </h1>
+            <div className="flex items-center gap-1">
+              <Boton
+                variante="secundario"
+                tamano="icono"
+                onClick={() => mover(-1)}
+                aria-label={t.comun.anterior}
+              >
+                <ChevronLeft size={18} />
+              </Boton>
+              <Boton variante="secundario" onClick={() => poner({ fechaMs: Date.now() })}>
+                {t.calendario.irHoy}
+              </Boton>
+              <Boton
+                variante="secundario"
+                tamano="icono"
+                onClick={() => mover(1)}
+                aria-label={t.comun.siguiente}
+              >
+                <ChevronRight size={18} />
+              </Boton>
+              <input
+                type="date"
+                className="campo h-10 w-[150px]"
+                aria-label={t.calendario.irFecha}
+                value={claveDia(fecha)}
+                onChange={(e) =>
+                  e.target.value && poner({ fechaMs: desdeClaveDia(e.target.value).getTime() })
+                }
+              />
+            </div>
+            {selectorVista}
             <Link
               to="/plantilla"
               className="inline-flex h-10 items-center gap-2 rounded-md px-3 text-sm font-semibold text-texto-suave hover:bg-superficie-2"
             >
               <CalendarRange size={16} aria-hidden /> {t.calendario.plantilla}
             </Link>
-          )}
-          <Boton
-            variante="primario"
-            icono={<Plus size={16} />}
-            onClick={() => {
-              const base =
-                vista === 'agenda' || vista === 'mes' ? startOfDay(Date.now()) : startOfDay(fecha);
-              const ahora = new Date();
-              const hora = claveDia(base) === claveDia(ahora) ? ahora.getHours() + 1 : 9;
-              abrirNuevo(base.getTime() + hora * 3_600_000, 0);
-            }}
-          >
-            {!esMovil && t.calendario.nuevoBloque}
-          </Boton>
-        </div>
+            <Boton variante="primario" icono={<Plus size={16} />} onClick={nuevoBloque}>
+              {t.calendario.nuevoBloque}
+            </Boton>
+          </div>
+        )}
 
         <div className="flex gap-4">
           {!esMovil && <PanelArrastrables modo="lateral" />}
           <div className="min-w-0 flex-1">
-            {(vista === 'dia' || vista === 'semana') && (
+            {diaMovil && (
+              <>
+                <TiraSemanal
+                  fecha={fecha}
+                  inicioSemana={inicioSemana}
+                  ocurrencias={ocurrencias}
+                  etiquetas={etiquetas}
+                  alElegir={irADia}
+                />
+                <div ref={rejilla} {...gestosDia}>
+                  <VistaTiempo
+                    dias={dias}
+                    ocurrencias={ocurrencias}
+                    etiquetas={etiquetas}
+                    avisos={avisos}
+                    previsualizacion={previa}
+                    alCrear={abrirNuevo}
+                    alElegirDia={elegirDia}
+                    compacta
+                  />
+                </div>
+              </>
+            )}
+            {!diaMovil && (vista === 'dia' || vista === 'semana') && (
               <VistaTiempo
                 dias={dias}
                 ocurrencias={ocurrencias}
@@ -420,14 +524,17 @@ export function PantallaCalendario({ vistaInicial }: { vistaInicial?: VistaCalen
               />
             )}
             {vista === 'mes' && (
-              <VistaMes
-                fecha={fecha}
-                ocurrencias={ocurrencias}
-                etiquetas={etiquetas}
-                avisos={avisos}
-                alElegirDia={elegirDia}
-                alCrear={abrirNuevo}
-              />
+              <div {...(esMovil ? gestosPeriodo : {})}>
+                <VistaMes
+                  fecha={fecha}
+                  ocurrencias={ocurrencias}
+                  etiquetas={etiquetas}
+                  avisos={avisos}
+                  alElegirDia={elegirDia}
+                  alCrear={abrirNuevo}
+                  compacta={esMovil}
+                />
+              </div>
             )}
             {vista === 'agenda' && (
               <VistaAgenda ocurrencias={ocurrencias} etiquetas={etiquetas} avisos={avisos} />

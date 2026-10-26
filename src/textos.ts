@@ -147,6 +147,8 @@ export const t = {
     nuevoBloque: 'Nuevo bloque',
     irHoy: 'Hoy',
     irFecha: 'Ir a fecha',
+    semanaAnterior: 'Semana anterior',
+    semanaSiguiente: 'Semana siguiente',
     todoElDia: 'Todo el día',
     masEventos: (n: number) => `+${n} más`,
     agendaVacia: 'No hay nada planificado en los próximos días.',

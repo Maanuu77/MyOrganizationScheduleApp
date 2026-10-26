@@ -52,6 +52,11 @@ interface Props {
   previsualizacion: Previsualizacion | null;
   alCrear: (inicioMs: number, finMs: number) => void;
   alElegirDia: (dia: Date) => void;
+  /**
+   * Día en el móvil: la fecha ya se ve en la tira semanal, así que la cabecera solo aparece
+   * si hay bloques de todo el día, y la rejilla deja sitio a la tira.
+   */
+  compacta?: boolean;
 }
 
 export function VistaTiempo({
@@ -62,6 +67,7 @@ export function VistaTiempo({
   previsualizacion,
   alCrear,
   alElegirDia,
+  compacta = false,
 }: Props) {
   const altoHora = useAltoHora();
   const formato24h = useDatos((s) => s.ajustes.formato24h);
@@ -89,56 +95,69 @@ export function VistaTiempo({
     return mapa;
   }, [dias, ocurrencias]);
 
-  const todoElDia = ocurrencias.filter((o) => o.evento.todoElDia);
+  const todoElDia = ocurrencias.filter(
+    (o) => o.evento.todoElDia && dias.some((d) => claveDia(o.inicioMs) === claveDia(d)),
+  );
   const horas = Array.from({ length: 24 }, (_, h) => h);
 
   return (
-    <div className="tarjeta-plana flex h-[calc(100dvh-210px)] min-h-[420px] flex-col overflow-hidden md:h-[calc(100dvh-160px)]">
+    <div
+      className={`tarjeta-plana flex flex-col overflow-hidden ${
+        compacta
+          ? // Termina justo encima del panel «Etiquetas y tareas» y la barra inferior
+            'h-[calc(100dvh-375px)] min-h-[320px]'
+          : 'h-[calc(100dvh-210px)] min-h-[420px] md:h-[calc(100dvh-160px)]'
+      }`}
+    >
       {/* Cabecera con los días */}
       {/* scrollbar-gutter reserva el hueco de la barra de desplazamiento para que la cabecera
           quede alineada con las columnas de abajo */}
-      <div className="flex overflow-hidden border-b border-borde bg-superficie [scrollbar-gutter:stable]">
-        <div className="w-10 shrink-0 sm:w-14" />
-        {dias.map((d) => {
-          const hoy = isToday(d);
-          const delDia = todoElDia.filter((o) => claveDia(o.inicioMs) === claveDia(d));
-          return (
-            <div
-              key={claveDia(d)}
-              className="min-w-0 flex-1 border-l border-borde px-0.5 py-1.5 text-center sm:px-1"
-            >
-              <button
-                type="button"
-                onClick={() => alElegirDia(d)}
-                aria-label={capitalizar(formatear(d, "EEEE d 'de' MMMM"))}
-                aria-current={hoy ? 'date' : undefined}
-                className="mx-auto flex flex-col items-center rounded-md px-0.5 hover:bg-superficie-2 sm:px-2"
+      {(!compacta || todoElDia.length > 0) && (
+        <div className="flex overflow-hidden border-b border-borde bg-superficie [scrollbar-gutter:stable]">
+          <div className="w-10 shrink-0 sm:w-14" />
+          {dias.map((d) => {
+            const hoy = isToday(d);
+            const delDia = todoElDia.filter((o) => claveDia(o.inicioMs) === claveDia(d));
+            return (
+              <div
+                key={claveDia(d)}
+                className="min-w-0 flex-1 border-l border-borde px-0.5 py-1.5 text-center sm:px-1"
               >
-                <span
-                  className={`text-[10px] font-bold uppercase sm:text-[11px] ${hoy ? 'text-acento' : 'text-texto-tenue'}`}
-                >
-                  {formatear(d, 'EEE')}
-                </span>
-                <span
-                  className={`grid h-7 w-7 place-items-center rounded-full text-sm font-extrabold sm:h-8 sm:w-8 sm:text-base ${hoy ? 'degradado-marca text-white shadow-media' : ''}`}
-                >
-                  {formatear(d, 'd')}
-                </span>
-              </button>
-              {delDia.map((o) => {
-                const e = o.etiquetaId ? etiquetas.get(o.etiquetaId) : undefined;
-                return (
-                  <ChipTodoElDia
-                    key={o.clave}
-                    oc={o}
-                    color={o.evento.color ?? e?.color ?? '#6D5CF0'}
-                  />
-                );
-              })}
-            </div>
-          );
-        })}
-      </div>
+                {!compacta && (
+                  <button
+                    type="button"
+                    onClick={() => alElegirDia(d)}
+                    aria-label={capitalizar(formatear(d, "EEEE d 'de' MMMM"))}
+                    aria-current={hoy ? 'date' : undefined}
+                    className="mx-auto flex flex-col items-center rounded-md px-0.5 hover:bg-superficie-2 sm:px-2"
+                  >
+                    <span
+                      className={`text-[10px] font-bold uppercase sm:text-[11px] ${hoy ? 'text-acento' : 'text-texto-tenue'}`}
+                    >
+                      {formatear(d, 'EEE')}
+                    </span>
+                    <span
+                      className={`grid h-7 w-7 place-items-center rounded-full text-sm font-extrabold sm:h-8 sm:w-8 sm:text-base ${hoy ? 'degradado-marca text-white shadow-media' : ''}`}
+                    >
+                      {formatear(d, 'd')}
+                    </span>
+                  </button>
+                )}
+                {delDia.map((o) => {
+                  const e = o.etiquetaId ? etiquetas.get(o.etiquetaId) : undefined;
+                  return (
+                    <ChipTodoElDia
+                      key={o.clave}
+                      oc={o}
+                      color={o.evento.color ?? e?.color ?? '#6D5CF0'}
+                    />
+                  );
+                })}
+              </div>
+            );
+          })}
+        </div>
+      )}
 
       {/* Rejilla desplazable */}
       <div

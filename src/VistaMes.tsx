@@ -1,4 +1,5 @@
 // Vista Mes: 6 semanas con hasta 3 bloques por día. Los días aceptan bloques, etiquetas y tareas soltados.
+// En el móvil los títulos no caben: cada día muestra puntos de color y al tocarlo se abre ese día.
 import { memo, useMemo } from 'react';
 import { useDraggable, useDroppable } from '@dnd-kit/core';
 import { addDays, isSameMonth, isToday, startOfDay, startOfMonth } from 'date-fns';
@@ -30,9 +31,22 @@ interface Props {
   avisos: Map<string, AvisoCarga[]>;
   alElegirDia: (dia: Date) => void;
   alCrear: (inicioMs: number, finMs: number) => void;
+  /** Móvil: puntos de color en lugar de los títulos de los bloques. */
+  compacta?: boolean;
 }
 
-export function VistaMes({ fecha, ocurrencias, etiquetas, avisos, alElegirDia, alCrear }: Props) {
+/** Puntos que caben en una celda del mes en el móvil. */
+const MAX_PUNTOS = 4;
+
+export function VistaMes({
+  fecha,
+  ocurrencias,
+  etiquetas,
+  avisos,
+  alElegirDia,
+  alCrear,
+  compacta = false,
+}: Props) {
   const inicioSemana = useDatos((s) => s.ajustes.inicioSemana);
   const dias = useMemo(() => diasDelMes(fecha, inicioSemana), [fecha, inicioSemana]);
   const porDia = useMemo(() => {
@@ -68,6 +82,7 @@ export function VistaMes({ fecha, ocurrencias, etiquetas, avisos, alElegirDia, a
             avisos={avisos}
             alElegirDia={alElegirDia}
             alCrear={alCrear}
+            compacta={compacta}
           />
         ))}
       </div>
@@ -83,6 +98,7 @@ const CeldaDia = memo(function CeldaDia({
   avisos,
   alElegirDia,
   alCrear,
+  compacta,
 }: {
   dia: Date;
   delMes: boolean;
@@ -91,6 +107,7 @@ const CeldaDia = memo(function CeldaDia({
   avisos: Map<string, AvisoCarga[]>;
   alElegirDia: (d: Date) => void;
   alCrear: (inicioMs: number, finMs: number) => void;
+  compacta: boolean;
 }) {
   const clave = claveDia(dia);
   const { setNodeRef, isOver } = useDroppable({
@@ -101,6 +118,44 @@ const CeldaDia = memo(function CeldaDia({
   const resto = ocurrencias.length - visibles.length;
   const conAviso = ocurrencias.some((o) => avisos.has(o.clave));
   const hoy = isToday(dia);
+
+  if (compacta) {
+    const colorDe = (o: Ocurrencia) =>
+      o.evento.color ?? etiquetas.get(o.etiquetaId ?? '')?.color ?? '#6D5CF0';
+    return (
+      <button
+        ref={setNodeRef}
+        type="button"
+        onClick={() => alElegirDia(dia)}
+        aria-label={`${formatear(dia, "EEEE d 'de' MMMM")}, ${ocurrencias.length} bloques`}
+        className={`flex min-h-[64px] flex-col items-center gap-1 border-r border-b border-borde pt-1.5 transition-colors ${
+          delMes ? '' : 'bg-superficie-2/50 opacity-60'
+        } ${isOver ? 'bg-acento/10' : ''}`}
+      >
+        <span
+          className={`numeros grid h-7 w-7 place-items-center rounded-full text-sm font-bold ${
+            hoy ? 'degradado-marca text-white' : ''
+          }`}
+        >
+          {formatear(dia, 'd')}
+        </span>
+        <span className="flex flex-wrap justify-center gap-0.5 px-0.5" aria-hidden>
+          {ocurrencias.slice(0, MAX_PUNTOS).map((o) => (
+            <span
+              key={o.clave}
+              className="h-1.5 w-1.5 rounded-full"
+              style={{ background: colorDe(o) }}
+            />
+          ))}
+          {ocurrencias.length > MAX_PUNTOS && (
+            <span className="text-[9px] leading-[6px] font-bold text-texto-tenue">+</span>
+          )}
+        </span>
+        {conAviso && <TriangleAlert size={10} className="text-aviso" aria-hidden />}
+      </button>
+    );
+  }
+
   return (
     <div
       ref={setNodeRef}

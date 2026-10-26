@@ -44,6 +44,13 @@ Decisiones tomadas durante el desarrollo cuando la especificación no las defin�
 - **Rutinas en el calendario**: si una rutina tiene hora y "Mostrar en el calendario", la app mantiene un evento recurrente de tipo "rutina" sincronizado con su programación.
 - **Pasos de arrastre**: 15 minutos.
 
+### Calendario en el móvil
+
+- **Día + tira semanal en lugar de la semana**: siete columnas en 375 px dejaban bloques de 40 px ilegibles. En el móvil la vista «Semana» se muestra como el día elegido a pantalla completa con una tira de los 7 días encima; cada día lleva un punto por color de los bloques que tiene (máximo 3 y un «+»). La preferencia guardada no cambia: al volver al ordenador se ve la semana.
+- **Deslizar**: sobre el día cambia de día (con una animación corta que no reinicia el desplazamiento vertical), sobre la tira cambia de semana y en Mes cambia de mes. Se ignora si el gesto es más vertical que horizontal, si es corto o lento, o si se está arrastrando un bloque (`useDeslizar.ts`).
+- **Barra compacta**: el título abre el selector de fecha nativo (un `input type="date"` invisible encima), con «Hoy» y «+» al lado y las vistas debajo. Desaparecen las flechas: las sustituyen el gesto y las flechas de la tira.
+- **Mes en el móvil**: cada celda muestra puntos de color en lugar de títulos recortados y al tocarla se abre ese día.
+
 ## Contador
 
 - **Avance de fase**: lo hace el primer dispositivo que detecta que la fase terminó, con una transacción que comprueba la versión del documento. Si todos estaban dormidos, al volver se calcula cuántas fases pasaron y se pone al día (la nueva fase empieza exactamente cuando acabó la anterior, no cuando alguien abre la app).
