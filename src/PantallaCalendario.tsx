@@ -21,7 +21,7 @@ import { CalendarRange, ChevronDown, ChevronLeft, ChevronRight, Plus } from 'luc
 import { useUI, avisar, type VistaCalendario } from './almacenUI';
 import { useDatos } from './almacenDatos';
 import { useClavesConAviso, useOcurrencias } from './useCalendarioDatos';
-import { useEsMovil } from './useMedia';
+import { useAnchoElemento, useEsMovil } from './useMedia';
 import { VistaTiempo, useAltoHora, type Previsualizacion } from './VistaTiempo';
 import { VistaMes, diasDelMes } from './VistaMes';
 import { VistaAgenda } from './VistaAgenda';
@@ -56,6 +56,15 @@ type DatosArrastre =
 
 const PASO_MIN = 15;
 
+/**
+ * Ancho mínimo para que la semana se lea bien: la columna de horas más 7 días de 84 px.
+ * Con menos sitio (pantalla dividida, paneles abiertos…) la semana se muestra como el día
+ * con la tira semanal encima, igual que en el móvil.
+ */
+const ANCHO_MIN_SEMANA = 56 + 7 * 84;
+/** Por debajo de este ancho la barra de herramientas se compacta y el panel lateral se pliega. */
+const ANCHO_BARRA_COMPLETA = 1000;
+
 /** Rango de fechas visible en cada vista. */
 function rangoVista(
   vista: VistaCalendario,
@@ -88,6 +97,8 @@ function tituloVista(vista: VistaCalendario, fecha: Date, dias: Date[], corto = 
     return capitalizar(formatear(fecha, corto ? 'EEEE d MMM' : "EEEE d 'de' MMMM"));
   if (vista === 'semana') {
     const [a, b] = [dias[0], dias[6]];
+    // Sin el año cuando hay poco sitio (el mes ya se sobreentiende)
+    if (corto) return `${formatear(a, 'd MMM')} – ${formatear(b, 'd MMM')}`;
     return a.getMonth() === b.getMonth()
       ? `${formatear(a, 'd')} – ${formatear(b, "d 'de' MMMM yyyy")}`
       : `${formatear(a, 'd MMM')} – ${formatear(b, 'd MMM yyyy')}`;
@@ -120,6 +131,17 @@ export function PantallaCalendario({ vistaInicial }: { vistaInicial?: VistaCalen
   const esMovil = useEsMovil();
   const vista = vistaEfectiva(vistaGuardada, esMovil);
   const diaMovil = esMovil && vista === 'dia';
+  // En escritorio el diseño depende del sitio real que tiene el calendario, no de la ventana
+  const [refPantalla, anchoPantalla] = useAnchoElemento<HTMLDivElement>();
+  const [refVistas, anchoVistas] = useAnchoElemento<HTMLDivElement>();
+  const barraCompacta = !esMovil && anchoPantalla > 0 && anchoPantalla < ANCHO_BARRA_COMPLETA;
+  // null = automático (abierto si hay sitio); al pulsar el botón manda lo que elija el usuario
+  const [panelElegido, setPanelElegido] = useState<boolean | null>(null);
+  const panelAbierto = panelElegido ?? !barraCompacta;
+  const semanaEstrecha =
+    !esMovil && vista === 'semana' && anchoVistas > 0 && anchoVistas < ANCHO_MIN_SEMANA;
+  // Día con la tira semanal encima: el día del móvil y la semana cuando no caben 7 columnas
+  const conTira = diaMovil || semanaEstrecha;
   const altoHora = useAltoHora();
   const [parametros, setParametros] = useSearchParams();
   const [activo, setActivo] = useState<DatosArrastre | null>(null);
@@ -153,6 +175,8 @@ export function PantallaCalendario({ vistaInicial }: { vistaInicial?: VistaCalen
     [diaMovil, fecha, inicioSemana, desde, hasta],
   );
   const ocurrencias = useOcurrencias(rangoCarga.desde, rangoCarga.hasta);
+  // Con la tira semanal la rejilla muestra solo el día elegido
+  const diaElegido = useMemo(() => [startOfDay(fecha)], [fecha]);
   const avisos = useClavesConAviso();
   const etiquetas = useMemo(() => new Map(etiquetasLista.map((e) => [e.id, e])), [etiquetasLista]);
 
@@ -366,7 +390,7 @@ export function PantallaCalendario({ vistaInicial }: { vistaInicial?: VistaCalen
     }
   };
 
-  const titulo = tituloVista(vista, fecha, dias, esMovil);
+  const titulo = tituloVista(vista, fecha, dias, esMovil || barraCompacta);
 
   const nuevoBloque = () => {
     const base = vista === 'agenda' || vista === 'mes' ? startOfDay(Date.now()) : startOfDay(fecha);
@@ -391,6 +415,31 @@ export function PantallaCalendario({ vistaInicial }: { vistaInicial?: VistaCalen
     />
   );
 
+  // Título que abre el selector de fecha nativo (un campo de fecha invisible encima). Se usa
+  // en el móvil y en la barra compacta, donde no hay sitio para el campo de fecha visible.
+  const tituloConSelector = (
+    <label className="relative mr-auto flex min-w-0 items-center gap-1 rounded-md">
+      <h1 className="truncate text-xl font-extrabold" aria-live="polite">
+        {titulo}
+      </h1>
+      <ChevronDown size={18} className="shrink-0 text-texto-tenue" aria-hidden />
+      <input
+        type="date"
+        className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
+        aria-label={t.calendario.irFecha}
+        value={claveDia(fecha)}
+        onClick={(e) => {
+          try {
+            e.currentTarget.showPicker?.();
+          } catch {
+            // Algunos navegadores no lo permiten: se abre al tocar el campo igualmente
+          }
+        }}
+        onChange={(e) => e.target.value && irADia(desdeClaveDia(e.target.value))}
+      />
+    </label>
+  );
+
   return (
     <DndContext
       sensors={sensores}
@@ -400,33 +449,13 @@ export function PantallaCalendario({ vistaInicial }: { vistaInicial?: VistaCalen
       onDragEnd={alSoltar}
       onDragCancel={limpiar}
     >
-      <div className={esMovil ? 'pb-16' : ''}>
+      <div ref={refPantalla} className={esMovil ? 'pb-16' : ''}>
         {/* Barra de herramientas del móvil: título que abre el selector de fecha, «Hoy» y «+»
             en una fila, y las vistas debajo */}
         {esMovil && (
           <div className="mb-3 space-y-2.5">
             <div className="flex items-center gap-2">
-              <label className="relative mr-auto flex min-w-0 items-center gap-1 rounded-md">
-                <h1 className="truncate text-xl font-extrabold" aria-live="polite">
-                  {titulo}
-                </h1>
-                <ChevronDown size={18} className="shrink-0 text-texto-tenue" aria-hidden />
-                {/* El selector de fecha nativo, invisible encima del título */}
-                <input
-                  type="date"
-                  className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
-                  aria-label={t.calendario.irFecha}
-                  value={claveDia(fecha)}
-                  onClick={(e) => {
-                    try {
-                      e.currentTarget.showPicker?.();
-                    } catch {
-                      // Algunos navegadores no lo permiten: se abre al tocar el campo igualmente
-                    }
-                  }}
-                  onChange={(e) => e.target.value && irADia(desdeClaveDia(e.target.value))}
-                />
-              </label>
+              {tituloConSelector}
               <Boton variante="secundario" tamano="sm" onClick={() => irADia(new Date())}>
                 {t.calendario.irHoy}
               </Boton>
@@ -443,16 +472,23 @@ export function PantallaCalendario({ vistaInicial }: { vistaInicial?: VistaCalen
           </div>
         )}
 
-        {/* Barra de herramientas */}
+        {/* Barra de herramientas. Si el calendario tiene poco sitio se compacta en una fila:
+            el título abre el selector de fecha y «Plantilla» y «Nuevo bloque» quedan en iconos */}
         {!esMovil && (
-          <div className="mb-4 flex flex-wrap items-center gap-2">
-            <h1
-              className="mr-auto min-w-0 truncate text-xl font-extrabold sm:text-2xl"
-              aria-live="polite"
-            >
-              {titulo}
-            </h1>
-            <div className="flex items-center gap-1">
+          <div
+            className={`mb-4 flex items-center gap-2 ${barraCompacta ? 'flex-nowrap' : 'flex-wrap'}`}
+          >
+            {barraCompacta ? (
+              tituloConSelector
+            ) : (
+              <h1
+                className="mr-auto min-w-0 truncate text-xl font-extrabold sm:text-2xl"
+                aria-live="polite"
+              >
+                {titulo}
+              </h1>
+            )}
+            <div className="flex shrink-0 items-center gap-1">
               <Boton
                 variante="secundario"
                 tamano="icono"
@@ -472,33 +508,55 @@ export function PantallaCalendario({ vistaInicial }: { vistaInicial?: VistaCalen
               >
                 <ChevronRight size={18} />
               </Boton>
-              <input
-                type="date"
-                className="campo h-10 w-[150px]"
-                aria-label={t.calendario.irFecha}
-                value={claveDia(fecha)}
-                onChange={(e) =>
-                  e.target.value && poner({ fechaMs: desdeClaveDia(e.target.value).getTime() })
-                }
-              />
+              {!barraCompacta && (
+                <input
+                  type="date"
+                  className="campo h-10 w-[150px]"
+                  aria-label={t.calendario.irFecha}
+                  value={claveDia(fecha)}
+                  onChange={(e) =>
+                    e.target.value && poner({ fechaMs: desdeClaveDia(e.target.value).getTime() })
+                  }
+                />
+              )}
             </div>
-            {selectorVista}
+            <div className="shrink-0">{selectorVista}</div>
             <Link
               to="/plantilla"
-              className="inline-flex h-10 items-center gap-2 rounded-md px-3 text-sm font-semibold text-texto-suave hover:bg-superficie-2"
+              className={`inline-flex h-10 items-center gap-2 rounded-md text-sm font-semibold text-texto-suave hover:bg-superficie-2 ${barraCompacta ? 'w-10 justify-center' : 'px-3'}`}
+              aria-label={barraCompacta ? t.calendario.plantilla : undefined}
+              title={barraCompacta ? t.calendario.plantilla : undefined}
             >
-              <CalendarRange size={16} aria-hidden /> {t.calendario.plantilla}
+              <CalendarRange size={16} aria-hidden /> {!barraCompacta && t.calendario.plantilla}
             </Link>
-            <Boton variante="primario" icono={<Plus size={16} />} onClick={nuevoBloque}>
-              {t.calendario.nuevoBloque}
-            </Boton>
+            {barraCompacta ? (
+              <Boton
+                variante="primario"
+                tamano="icono"
+                onClick={nuevoBloque}
+                aria-label={t.calendario.nuevoBloque}
+                title={t.calendario.nuevoBloque}
+              >
+                <Plus size={18} />
+              </Boton>
+            ) : (
+              <Boton variante="primario" icono={<Plus size={16} />} onClick={nuevoBloque}>
+                {t.calendario.nuevoBloque}
+              </Boton>
+            )}
           </div>
         )}
 
         <div className="flex gap-4">
-          {!esMovil && <PanelArrastrables modo="lateral" />}
-          <div className="min-w-0 flex-1">
-            {diaMovil && (
+          {!esMovil && (
+            <PanelArrastrables
+              modo="lateral"
+              plegado={!panelAbierto}
+              alAlternar={() => setPanelElegido(!panelAbierto)}
+            />
+          )}
+          <div ref={refVistas} className="min-w-0 flex-1">
+            {conTira && (
               <>
                 <TiraSemanal
                   fecha={fecha}
@@ -509,7 +567,7 @@ export function PantallaCalendario({ vistaInicial }: { vistaInicial?: VistaCalen
                 />
                 <div ref={rejilla} {...gestosDia}>
                   <VistaTiempo
-                    dias={dias}
+                    dias={diaElegido}
                     ocurrencias={ocurrencias}
                     etiquetas={etiquetas}
                     avisos={avisos}
@@ -521,7 +579,7 @@ export function PantallaCalendario({ vistaInicial }: { vistaInicial?: VistaCalen
                 </div>
               </>
             )}
-            {!diaMovil && (vista === 'dia' || vista === 'semana') && (
+            {!conTira && (vista === 'dia' || vista === 'semana') && (
               <VistaTiempo
                 dias={dias}
                 ocurrencias={ocurrencias}

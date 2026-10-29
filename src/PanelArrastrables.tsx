@@ -1,12 +1,22 @@
 // Panel con las etiquetas, rutinas y tareas que se arrastran al calendario.
-// En escritorio es una barra lateral; en móvil, una hoja inferior plegable.
+// En escritorio es una barra lateral (que se pliega a una columna de iconos cuando falta
+// sitio); en móvil, una hoja inferior plegable.
 // Alternativa sin arrastre: el botón de cada elemento abre "Crear sesión en…" / "Planificar en…".
 
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router';
 import { useDraggable } from '@dnd-kit/core';
 import { motion } from 'motion/react';
-import { CalendarPlus, ChevronUp, GripVertical, Plus, Repeat, Tag } from 'lucide-react';
+import {
+  CalendarPlus,
+  ChevronUp,
+  GripVertical,
+  PanelLeftClose,
+  PanelLeftOpen,
+  Plus,
+  Repeat,
+  Tag,
+} from 'lucide-react';
 import { addHours, startOfHour } from 'date-fns';
 import { buscarEtiqueta, etiquetasActivas, useDatos } from './almacenDatos';
 import { avisar } from './almacenUI';
@@ -65,6 +75,28 @@ function ChipArrastrable({
       >
         <CalendarPlus size={15} />
       </button>
+    </div>
+  );
+}
+
+/** Etiqueta en el panel plegado: solo el cuadrado de color con su icono, pero se arrastra igual. */
+function ChipMini({ etiqueta }: { etiqueta: Etiqueta }) {
+  const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
+    id: `etiqueta-${etiqueta.id}`,
+    data: { tipo: 'etiqueta', etiqueta },
+  });
+  return (
+    <div
+      ref={setNodeRef}
+      {...listeners}
+      {...attributes}
+      aria-roledescription="arrastrable"
+      aria-label={`${etiqueta.nombre}, ${etiqueta.duracionMin} min`}
+      title={`${etiqueta.nombre} · ${etiqueta.duracionMin}′`}
+      className={`grid h-8 w-8 shrink-0 cursor-grab place-items-center rounded-md text-white shadow-suave transition-transform hover:-translate-y-0.5 hover:shadow-media active:cursor-grabbing ${isDragging ? 'opacity-40' : ''}`}
+      style={{ background: etiqueta.color, touchAction: 'manipulation' }}
+    >
+      <IconoEtiqueta nombre={etiqueta.icono} tamano={15} />
     </div>
   );
 }
@@ -154,7 +186,17 @@ function RutinaArrastrable({ rutina, alElegirHora }: { rutina: Rutina; alElegirH
   );
 }
 
-export function PanelArrastrables({ modo }: { modo: 'lateral' | 'hoja' }) {
+export function PanelArrastrables({
+  modo,
+  plegado = false,
+  alAlternar,
+}: {
+  modo: 'lateral' | 'hoja';
+  /** Solo en el lateral: muestra una columna estrecha con las etiquetas en iconos. */
+  plegado?: boolean;
+  /** Botón para plegar o desplegar el lateral. */
+  alAlternar?: () => void;
+}) {
   const etiquetas = useDatos((s) => s.etiquetas);
   const tareas = useDatos((s) => s.tareas);
   const rutinas = useDatos((s) => s.rutinas);
@@ -263,13 +305,52 @@ export function PanelArrastrables({ modo }: { modo: 'lateral' | 'hoja' }) {
     />
   );
 
+  if (modo === 'lateral' && plegado) {
+    return (
+      <aside
+        className="tarjeta-plana desplazable sticky top-6 flex max-h-[calc(100dvh-160px)] w-12 shrink-0 flex-col items-center gap-1.5 overflow-y-auto py-2"
+        aria-label={t.calendario.panelEtiquetas}
+      >
+        <button
+          type="button"
+          onClick={alAlternar}
+          className="grid h-8 w-8 shrink-0 place-items-center rounded-md text-texto-tenue hover:bg-superficie-2 hover:text-acento"
+          aria-label={t.calendario.desplegarPanel}
+          aria-expanded={false}
+          title={t.calendario.desplegarPanel}
+        >
+          <PanelLeftOpen size={17} />
+        </button>
+        {activas.length > 0 && <div className="my-0.5 h-px w-6 shrink-0 bg-borde" />}
+        {activas.map((e) => (
+          <ChipMini key={e.id} etiqueta={e} />
+        ))}
+        {dialogo}
+      </aside>
+    );
+  }
+
   if (modo === 'lateral') {
     return (
       <aside
         className="tarjeta-plana desplazable sticky top-6 max-h-[calc(100dvh-160px)] w-60 shrink-0 overflow-y-auto p-3"
         aria-label={t.calendario.panelEtiquetas}
       >
-        <h2 className="mb-2 text-sm font-extrabold">{t.calendario.panelEtiquetas}</h2>
+        <div className="mb-2 flex items-center justify-between gap-2">
+          <h2 className="text-sm font-extrabold">{t.calendario.panelEtiquetas}</h2>
+          {alAlternar && (
+            <button
+              type="button"
+              onClick={alAlternar}
+              className="-my-1 grid h-8 w-8 shrink-0 place-items-center rounded-md text-texto-tenue hover:bg-superficie-2 hover:text-acento"
+              aria-label={t.calendario.plegarPanel}
+              aria-expanded
+              title={t.calendario.plegarPanel}
+            >
+              <PanelLeftClose size={16} />
+            </button>
+          )}
+        </div>
         {contenido}
         {dialogo}
       </aside>

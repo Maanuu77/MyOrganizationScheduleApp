@@ -159,6 +159,8 @@ export const t = {
     crearEtiquetas: 'Crear etiquetas',
     backlog: 'Tareas sin hora',
     abrirPanel: 'Etiquetas y tareas',
+    desplegarPanel: 'Mostrar etiquetas y tareas',
+    plegarPanel: 'Plegar el panel',
     protegidoTitulo: 'Tiempo protegido',
     protegidoTexto: (nombres: string) =>
       `Este hueco choca con un bloque protegido (${nombres}). ¿Quieres colocarlo igualmente?`,

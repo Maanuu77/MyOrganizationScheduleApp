@@ -20,6 +20,7 @@ import {
 import { useReloj } from './useReloj';
 import { useDatos } from './almacenDatos';
 import { useUI } from './almacenUI';
+import { useEsMovil } from './useMedia';
 import { t } from './textos';
 
 const PASO_MIN = 15;
@@ -53,8 +54,8 @@ interface Props {
   alCrear: (inicioMs: number, finMs: number) => void;
   alElegirDia: (dia: Date) => void;
   /**
-   * Día en el móvil: la fecha ya se ve en la tira semanal, así que la cabecera solo aparece
-   * si hay bloques de todo el día, y la rejilla deja sitio a la tira.
+   * Día con la tira semanal encima (móvil o escritorio estrecho): la fecha ya se ve en la tira,
+   * así que la cabecera solo aparece si hay bloques de todo el día, y la rejilla deja sitio a la tira.
    */
   compacta?: boolean;
 }
@@ -72,6 +73,7 @@ export function VistaTiempo({
   const altoHora = useAltoHora();
   const formato24h = useDatos((s) => s.ajustes.formato24h);
   const sueno = useDatos((s) => s.ajustes.sueno);
+  const esMovil = useEsMovil();
   const contenedor = useRef<HTMLDivElement>(null);
 
   // Al abrir, desplazamos hasta una hora antes de la actual (o a las 7:00)
@@ -104,8 +106,11 @@ export function VistaTiempo({
     <div
       className={`tarjeta-plana flex flex-col overflow-hidden ${
         compacta
-          ? // Termina justo encima del panel «Etiquetas y tareas» y la barra inferior
-            'h-[calc(100dvh-375px)] min-h-[320px]'
+          ? esMovil
+            ? // Termina justo encima del panel «Etiquetas y tareas» y la barra inferior
+              'h-[calc(100dvh-375px)] min-h-[320px]'
+            : // Escritorio estrecho: deja sitio a la tira semanal
+              'h-[calc(100dvh-225px)] min-h-[380px]'
           : 'h-[calc(100dvh-210px)] min-h-[420px] md:h-[calc(100dvh-160px)]'
       }`}
     >

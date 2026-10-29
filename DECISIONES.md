@@ -51,6 +51,16 @@ Decisiones tomadas durante el desarrollo cuando la especificación no las defin�
 - **Barra compacta**: el título abre el selector de fecha nativo (un `input type="date"` invisible encima), con «Hoy» y «+» al lado y las vistas debajo. Desaparecen las flechas: las sustituyen el gesto y las flechas de la tira.
 - **Mes en el móvil**: cada celda muestra puntos de color en lugar de títulos recortados y al tocarla se abre ese día.
 
+### Calendario con poco sitio (pantalla dividida, tablet)
+
+- **Se adapta al sitio real, no a la ventana**: con la pantalla dividida o con paneles abiertos la ventana puede pasar de 768 px y aun así dejar 400 px al calendario (antes salían columnas de 40 px con títulos como «P.»). `useAnchoElemento` (`useMedia.ts`) mide con un `ResizeObserver` el hueco del calendario y cada vista decide con ese ancho.
+- **Semana**: si no caben 7 columnas de 84 px más la columna de horas (644 px), se muestra como en el móvil: el día elegido con la tira semanal encima. La opción «Semana» sigue ahí; al volver a tener sitio se ven las 7 columnas.
+- **Mes**: celdas de 120 px o más muestran hora y título; entre 76 y 120 px, solo el título (antes se quedaba solo la hora, que no dice nada); por debajo, puntos de color como en el móvil.
+- **Panel «Arrastra al calendario»**: por debajo de 1000 px de ancho se pliega a una columna de 48 px con las etiquetas como iconos de color, que se pueden seguir arrastrando. Un botón lo despliega o pliega a mano.
+- **Barra de herramientas compacta** (también por debajo de 1000 px): una sola fila; el título abre el selector de fecha, «Plantilla» y «Nuevo bloque» quedan como iconos y la semana se titula sin el año.
+- **Barra lateral de iconos** entre 768 y 1279 px de ventana (72 px en vez de 240), con el nombre de cada sección al pasar el ratón.
+- **Panel fijo de Hoy a partir de 1440 px** (antes 1280): en un portátil de 1280–1439 px sus 340 px dejaban la semana ilegible. Por debajo se abre como hoja con el botón flotante.
+
 ## Contador
 
 - **Avance de fase**: lo hace el primer dispositivo que detecta que la fase terminó, con una transacción que comprueba la versión del documento. Si todos estaban dormidos, al volver se calcula cuántas fases pasaron y se pone al día (la nueva fase empieza exactamente cuando acabó la anterior, no cuando alguien abre la app).
@@ -106,7 +116,7 @@ Decisiones tomadas durante el desarrollo cuando la especificación no las defin�
 - **Identidad propia**: degradado violeta → coral, logotipo de anillo de progreso con un punto central (una sesión de foco en marcha), tarjetas con degradado sutil y sombras teñidas del color de marca.
 - **Color de acento** configurable; el coral del degradado se mantiene fijo como segunda nota de marca.
 - **Densidad** cambia el alto de la hora en el calendario y el relleno de las tarjetas.
-- **Navegación**: barra lateral en escritorio; en móvil, barra inferior con Hoy, Calendario, Foco, Tareas y "Más". El panel de Hoy es fijo a partir de 1280 px y una hoja en pantallas menores (botón flotante).
+- **Navegación**: barra lateral en escritorio (solo iconos entre 768 y 1279 px); en móvil, barra inferior con Hoy, Calendario, Foco, Tareas y "Más". El panel de Hoy es fijo a partir de 1440 px y una hoja en pantallas menores (botón flotante).
 - **Atajos**: `N` nuevo, `T` hoy, flechas, `D/S/M/A` para las vistas, `Espacio` pausa el contador y `?` muestra la ayuda.
 - **Movimiento reducido**: `MotionConfig reducedMotion="user"` más una regla CSS que anula animaciones y transiciones.
 - **Sin desplazamiento lateral**: con textos largos las rejillas crecían hasta el ancho del texto (un hijo de `grid` no encoge por debajo de su contenido) y la pantalla del móvil se ensanchaba. Se corrige en `tema.css` con tres reglas globales: `min-width: 0` en los hijos de `.grid`, `overflow-wrap: break-word` para partir enlaces y palabras sin espacios, y `overflow-x: clip` en `html`/`body` como red de seguridad. Los selectores de opciones (`Segmentado`) pasan a una segunda línea en vez de ocultar opciones con scroll.

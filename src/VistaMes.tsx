@@ -1,5 +1,7 @@
 // Vista Mes: 6 semanas con hasta 3 bloques por día. Los días aceptan bloques, etiquetas y tareas soltados.
-// En el móvil los títulos no caben: cada día muestra puntos de color y al tocarlo se abre ese día.
+// El detalle depende del ancho real de cada celda (no de la ventana): con sitio se ve la hora y
+// el título; más estrecho, solo el título; y si ni el título cabe (móvil, pantalla dividida),
+// cada día muestra puntos de color y al tocarlo se abre ese día.
 import { memo, useMemo } from 'react';
 import { useDraggable, useDroppable } from '@dnd-kit/core';
 import { addDays, isSameMonth, isToday, startOfDay, startOfMonth } from 'date-fns';
@@ -16,6 +18,7 @@ import {
 import { useUI } from './almacenUI';
 import { useDatos } from './almacenDatos';
 import { acabaDeArrastrar } from './BloqueCalendario';
+import { useAnchoElemento } from './useMedia';
 import { t } from './textos';
 
 /** Los 42 días que se ven en la cuadrícula del mes. */
@@ -31,12 +34,28 @@ interface Props {
   avisos: Map<string, AvisoCarga[]>;
   alElegirDia: (dia: Date) => void;
   alCrear: (inicioMs: number, finMs: number) => void;
-  /** Móvil: puntos de color en lugar de los títulos de los bloques. */
+  /** Móvil: puntos de color en lugar de los títulos de los bloques, quepan o no. */
   compacta?: boolean;
 }
 
 /** Puntos que caben en una celda del mes en el móvil. */
 const MAX_PUNTOS = 4;
+
+/** Cuánto se enseña de cada bloque según el ancho de la celda. */
+type Detalle = 'completo' | 'titulos' | 'puntos';
+/** Ancho de celda (px) a partir del cual cabe la hora junto al título. */
+const CELDA_CON_HORA = 120;
+/** Ancho de celda (px) por debajo del cual ni el título se lee: se pasan a puntos. */
+const CELDA_CON_TITULO = 76;
+
+function detalleSegunAncho(anchoMes: number, compacta: boolean): Detalle {
+  if (compacta) return 'puntos';
+  // Aún sin medir: se pinta completo, que es lo normal en escritorio
+  if (anchoMes === 0) return 'completo';
+  const celda = anchoMes / 7;
+  if (celda < CELDA_CON_TITULO) return 'puntos';
+  return celda < CELDA_CON_HORA ? 'titulos' : 'completo';
+}
 
 export function VistaMes({
   fecha,
@@ -58,9 +77,11 @@ export function VistaMes({
     }
     return mapa;
   }, [ocurrencias]);
+  const [refMes, anchoMes] = useAnchoElemento<HTMLDivElement>();
+  const detalle = detalleSegunAncho(anchoMes, compacta);
 
   return (
-    <div className="tarjeta-plana overflow-hidden">
+    <div ref={refMes} className="tarjeta-plana overflow-hidden">
       <div className="grid grid-cols-7 border-b border-borde bg-superficie-2/60">
         {ordenDias(inicioSemana).map((d) => (
           <div
@@ -82,7 +103,7 @@ export function VistaMes({
             avisos={avisos}
             alElegirDia={alElegirDia}
             alCrear={alCrear}
-            compacta={compacta}
+            detalle={detalle}
           />
         ))}
       </div>
@@ -98,7 +119,7 @@ const CeldaDia = memo(function CeldaDia({
   avisos,
   alElegirDia,
   alCrear,
-  compacta,
+  detalle,
 }: {
   dia: Date;
   delMes: boolean;
@@ -107,7 +128,7 @@ const CeldaDia = memo(function CeldaDia({
   avisos: Map<string, AvisoCarga[]>;
   alElegirDia: (d: Date) => void;
   alCrear: (inicioMs: number, finMs: number) => void;
-  compacta: boolean;
+  detalle: Detalle;
 }) {
   const clave = claveDia(dia);
   const { setNodeRef, isOver } = useDroppable({
@@ -119,7 +140,7 @@ const CeldaDia = memo(function CeldaDia({
   const conAviso = ocurrencias.some((o) => avisos.has(o.clave));
   const hoy = isToday(dia);
 
-  if (compacta) {
+  if (detalle === 'puntos') {
     const colorDe = (o: Ocurrencia) =>
       o.evento.color ?? etiquetas.get(o.etiquetaId ?? '')?.color ?? '#6D5CF0';
     return (
@@ -186,6 +207,7 @@ const CeldaDia = memo(function CeldaDia({
             key={o.clave}
             oc={o}
             etiqueta={o.etiquetaId ? (etiquetas.get(o.etiquetaId) ?? null) : null}
+            conHora={detalle === 'completo'}
           />
         ))}
         {resto > 0 && (
@@ -202,7 +224,16 @@ const CeldaDia = memo(function CeldaDia({
   );
 });
 
-function ChipMes({ oc, etiqueta }: { oc: Ocurrencia; etiqueta: Etiqueta | null }) {
+function ChipMes({
+  oc,
+  etiqueta,
+  conHora,
+}: {
+  oc: Ocurrencia;
+  etiqueta: Etiqueta | null;
+  /** Si la celda es estrecha se quita la hora para que se lea el título. */
+  conHora: boolean;
+}) {
   const poner = useUI((s) => s.poner);
   const formato24h = useDatos((s) => s.ajustes.formato24h);
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
@@ -235,8 +266,8 @@ function ChipMes({ oc, etiqueta }: { oc: Ocurrencia; etiqueta: Etiqueta | null }
         style={{ background: color }}
         aria-hidden
       />
-      {!oc.evento.todoElDia && (
-        <span className="numeros hidden opacity-75 sm:inline">
+      {conHora && !oc.evento.todoElDia && (
+        <span className="numeros shrink-0 opacity-75">
           {formatearHora(oc.inicioMs, formato24h)}
         </span>
       )}
