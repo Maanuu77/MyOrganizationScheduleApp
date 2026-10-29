@@ -29,7 +29,7 @@ import { Logo } from './Logo';
 import { useDatos } from './almacenDatos';
 import { useUI } from './almacenUI';
 import { useAvisosCarga } from './useCalendarioDatos';
-import { useEsEscritorioGrande, useEsMovil } from './useMedia';
+import { useEsEscritorioEstrecho, useEsEscritorioGrande, useEsMovil } from './useMedia';
 import { PanelHoy } from './PanelHoy';
 import { Modal } from './Modal';
 import { EditorBloque } from './EditorBloque';
@@ -81,6 +81,7 @@ export function Diseno() {
   const navegar = useNavigate();
   const esMovil = useEsMovil();
   const esGrande = useEsEscritorioGrande();
+  const estrecha = useEsEscritorioEstrecho();
   const usuario = useDatos((s) => s.usuario);
   const panelHoy = useUI((s) => s.panelHoy);
   const hojaHoy = useUI((s) => s.hojaHoy);
@@ -102,7 +103,9 @@ export function Diseno() {
   const graves = avisos.filter((a) => a.severidad !== 'info').length;
 
   const claseEnlace = ({ isActive }: { isActive: boolean }) =>
-    `group flex items-center gap-3 rounded-md px-3 py-2 text-sm font-semibold transition-colors ${
+    `group relative flex items-center gap-3 rounded-md text-sm font-semibold transition-colors ${
+      estrecha ? 'h-10 w-12 justify-center' : 'px-3 py-2'
+    } ${
       isActive
         ? 'bg-acento/12 text-acento'
         : 'text-texto-suave hover:bg-superficie-2 hover:text-texto'
@@ -119,51 +122,90 @@ export function Diseno() {
       </a>
 
       {!esMovil && (
-        <aside className="sticky top-0 flex h-dvh w-60 shrink-0 flex-col border-r border-borde bg-superficie/70 px-3 py-4 backdrop-blur">
-          <div className="mb-6 flex items-center gap-2.5 px-2">
+        // En escritorio estrecho (tablet, pantalla dividida) la barra muestra solo iconos
+        // para dejar el sitio al contenido; el nombre de cada sección sale al pasar el ratón
+        <aside
+          className={`sticky top-0 flex h-dvh shrink-0 flex-col border-r border-borde bg-superficie/70 py-4 backdrop-blur ${
+            estrecha ? 'w-[72px] items-center px-2' : 'w-60 px-3'
+          }`}
+        >
+          <div className={`mb-6 flex items-center gap-2.5 ${estrecha ? '' : 'px-2'}`}>
             <Logo tamano={34} />
-            <div className="leading-tight">
-              <p className="font-titulos text-[15px] font-extrabold">MyOrganization</p>
-              <p className="text-xs font-semibold text-texto-tenue">Schedule</p>
-            </div>
+            {!estrecha && (
+              <div className="leading-tight">
+                <p className="font-titulos text-[15px] font-extrabold">MyOrganization</p>
+                <p className="text-xs font-semibold text-texto-tenue">Schedule</p>
+              </div>
+            )}
           </div>
           <nav
             aria-label={t.nav.principal}
             className="flex flex-1 flex-col gap-0.5 overflow-y-auto"
           >
             {PRINCIPALES.map((e) => (
-              <NavLink key={e.ruta} to={e.ruta} className={claseEnlace}>
+              <NavLink
+                key={e.ruta}
+                to={e.ruta}
+                className={claseEnlace}
+                aria-label={estrecha ? e.texto : undefined}
+                title={estrecha ? e.texto : undefined}
+              >
                 <e.icono size={18} aria-hidden />
-                {e.texto}
+                {!estrecha && e.texto}
               </NavLink>
             ))}
             <div className="my-3 h-px bg-borde" />
-            {SECUNDARIOS.map((e) => (
-              <NavLink key={e.ruta} to={e.ruta} className={claseEnlace}>
-                <e.icono size={18} aria-hidden />
-                {e.texto}
-                {e.ruta === '/avisos' && <Insignia n={graves} />}
-              </NavLink>
-            ))}
+            {SECUNDARIOS.map((e) => {
+              const pendientes = e.ruta === '/avisos' ? graves : 0;
+              return (
+                <NavLink
+                  key={e.ruta}
+                  to={e.ruta}
+                  className={claseEnlace}
+                  aria-label={
+                    estrecha ? (pendientes ? `${e.texto} (${pendientes})` : e.texto) : undefined
+                  }
+                  title={estrecha ? e.texto : undefined}
+                >
+                  <e.icono size={18} aria-hidden />
+                  {!estrecha && e.texto}
+                  {estrecha
+                    ? pendientes > 0 && (
+                        <span className="absolute top-1.5 right-1.5 h-2 w-2 rounded-full bg-peligro" />
+                      )
+                    : e.ruta === '/avisos' && <Insignia n={graves} />}
+                </NavLink>
+              );
+            })}
           </nav>
-          <MiniContador />
-          <div className="mt-3 flex items-center gap-2 border-t border-borde px-2 pt-3">
+          <MiniContador compacto={estrecha} />
+          <div
+            className={`mt-3 flex items-center gap-2 border-t border-borde pt-3 ${
+              estrecha ? 'flex-col' : 'px-2'
+            }`}
+          >
             {usuario?.foto ? (
               <img
                 src={usuario.foto}
                 alt=""
                 className="h-8 w-8 rounded-full"
                 referrerPolicy="no-referrer"
+                title={estrecha ? (usuario.nombre ?? undefined) : undefined}
               />
             ) : (
-              <div className="grid h-8 w-8 place-items-center rounded-full bg-acento/15 text-sm font-bold text-acento">
+              <div
+                className="grid h-8 w-8 place-items-center rounded-full bg-acento/15 text-sm font-bold text-acento"
+                title={estrecha ? (usuario?.nombre ?? undefined) : undefined}
+              >
                 {(usuario?.nombre ?? '?').charAt(0)}
               </div>
             )}
-            <div className="min-w-0 flex-1">
-              <p className="truncate text-sm font-semibold">{usuario?.nombre}</p>
-              <p className="truncate text-xs text-texto-tenue">{usuario?.email}</p>
-            </div>
+            {!estrecha && (
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-sm font-semibold">{usuario?.nombre}</p>
+                <p className="truncate text-xs text-texto-tenue">{usuario?.email}</p>
+              </div>
+            )}
             <button
               type="button"
               onClick={() => poner({ mostrarAtajos: true })}
